@@ -1,0 +1,219 @@
+app_name: lxp-eng-planning
+
+# --------------------------------------------------------------------
+# knowledge：公共知识文档（选择性注入到指定角色）
+# --------------------------------------------------------------------
+knowledge:
+  - 编排范式: knowledge/编排范式.md
+    inject_to: [架构师]
+
+  - 前端拖拽交互最佳实践: knowledge/前端拖拽交互最佳实践.md
+    inject_to: [技术文档管理者, 代码生成者]
+
+  - 树形数据结构存储优化: knowledge/树形数据结构存储优化.md
+    inject_to: [技术文档管理者, 代码生成者]
+
+  - 文档驱动开发方法论: knowledge/文档驱动开发方法论.md
+    inject_to: [需求文档管理者, 技术文档管理者, 部署文档管理者]
+
+  - 精力管理领域知识: knowledge/精力管理领域知识.md
+    inject_to: [需求文档管理者, 技术文档管理者, 代码生成者]
+
+  - 校验标准手册: knowledge/校验标准手册.md
+    inject_to: [校验者, 综合裁决者]
+
+# --------------------------------------------------------------------
+# roles：角色定义（文档层 / 执行层 / 治理层 三层正交）
+# --------------------------------------------------------------------
+roles:
+
+  # === 文档层 ===
+
+  需求接收者:
+    type: producer
+    confirm: manual
+    outputs:
+      - 需求文档: 00-需求描述.md
+
+  需求文档管理者:
+    type: standard
+    confirm: auto
+    inputs:
+      - 需求文档: 00-需求描述.md
+      - 需求审计报告: outputs/需求审计报告.json, type=process
+      - 校验报告: outputs/校验报告.json, type=process        # [可选输入] 校验者 REQ_DOC_DEFECT 回退时存在
+      - 最终裁决书: outputs/最终裁决书.md                     # [可选输入] 综合裁决者 requirement_defect 回退时存在
+    outputs:
+      - 需求规格文档: outputs/需求规格文档.md
+      - 用户故事: outputs/用户故事.md
+      - 验收标准清单: outputs/验收标准清单.md
+
+  架构师:
+    type: standard
+    confirm: auto
+    inputs:
+      - 需求规格文档: outputs/需求规格文档.md
+      - 用户故事: outputs/用户故事.md
+      - 验收标准清单: outputs/验收标准清单.md
+      - 架构审计报告: outputs/架构审计报告.json, type=process  # [可选输入] 架构审计者 challenged 回退时存在
+      - 最终裁决书: outputs/最终裁决书.md                     # [可选输入] 综合裁决者 challenged 回退时存在
+    outputs:
+      - App架构文件: app.yaml
+      - 架构说明: outputs/架构说明.md
+
+  技术文档管理者:
+    type: standard
+    confirm: auto
+    inputs:
+      - App架构文件: app.yaml
+      - 架构说明: outputs/架构说明.md
+      - 需求规格文档: outputs/需求规格文档.md
+      - 校验报告: outputs/校验报告.json, type=process        # [可选输入] 校验者 DOC_DEFECT 回退时存在
+    outputs:
+      - 技术设计文档: outputs/技术设计文档.md
+      - API文档: outputs/API文档.md
+      - 数据库设计文档: outputs/数据库设计文档.md
+
+  部署文档管理者:
+    type: standard
+    confirm: auto
+    inputs:
+      - 前端代码: outputs/src/frontend/
+      - 后端代码: outputs/src/backend/
+      - 部署配置: outputs/docker-compose.yml
+      - 校验报告: outputs/校验报告.json, type=process
+      - App架构文件: app.yaml
+      - 最终裁决书: outputs/最终裁决书.md                     # [可选输入] 综合裁决者 deploy_doc_defect 回退时存在
+    outputs:
+      - 部署指南: outputs/部署指南.md
+      - 运维手册: outputs/运维手册.md
+      - 变更日志: outputs/CHANGELOG.md
+
+  # === 执行层 ===
+
+  代码生成者:
+    type: producer
+    confirm: auto
+    inputs:
+      - 技术设计文档: outputs/技术设计文档.md
+      - API文档: outputs/API文档.md
+      - 数据库设计文档: outputs/数据库设计文档.md
+      - App架构文件: app.yaml
+      - 校验报告: outputs/校验报告.json, type=process        # [可选输入] 校验者 BLOCKING 回退时存在
+    outputs:
+      - 前端代码: outputs/src/frontend/
+      - 后端代码: outputs/src/backend/
+      - 数据库Schema: outputs/prisma/schema.prisma
+      - 部署配置: outputs/docker-compose.yml
+
+  # === 治理层 ===
+
+  需求审计者:
+    type: standard
+    confirm: auto
+    inputs:
+      - 需求文档: 00-需求描述.md
+    outputs:
+      - 需求审计报告: outputs/需求审计报告.json, type=process
+
+  架构审计者:
+    type: standard
+    confirm: auto
+    inputs:
+      - App架构文件: app.yaml
+      - 架构说明: outputs/架构说明.md
+      - 需求规格文档: outputs/需求规格文档.md
+    outputs:
+      - 架构审计报告: outputs/架构审计报告.json, type=process
+
+  校验者:
+    type: standard
+    confirm: auto
+    inputs:
+      - 前端代码: outputs/src/frontend/
+      - 后端代码: outputs/src/backend/
+      - 数据库Schema: outputs/prisma/schema.prisma
+      - 部署配置: outputs/docker-compose.yml
+      - 技术设计文档: outputs/技术设计文档.md
+      - API文档: outputs/API文档.md
+      - 数据库设计文档: outputs/数据库设计文档.md
+      - 需求规格文档: outputs/需求规格文档.md
+      - 用户故事: outputs/用户故事.md
+      - 验收标准清单: outputs/验收标准清单.md
+    outputs:
+      - 校验报告: outputs/校验报告.json, type=process
+
+  综合裁决者:
+    type: standard
+    confirm: manual
+    inputs:
+      - 需求规格文档: outputs/需求规格文档.md
+      - 用户故事: outputs/用户故事.md
+      - 验收标准清单: outputs/验收标准清单.md
+      - App架构文件: app.yaml
+      - 架构说明: outputs/架构说明.md
+      - 技术设计文档: outputs/技术设计文档.md
+      - API文档: outputs/API文档.md
+      - 数据库设计文档: outputs/数据库设计文档.md
+      - 校验报告: outputs/校验报告.json, type=process
+      - 部署指南: outputs/部署指南.md
+      - 运维手册: outputs/运维手册.md
+      - 变更日志: outputs/CHANGELOG.md
+    outputs:
+      - 最终裁决书: outputs/最终裁决书.md
+      - 构建报告: outputs/构建报告.md
+
+# --------------------------------------------------------------------
+# edges：路由编排（唯一权威源）
+# --------------------------------------------------------------------
+edges:
+
+  # ===== producer 自动展开（producer → 校验角色）=====
+  - 需求接收者 → 需求接收者（校验）
+  - 代码生成者 → 代码生成者（校验）
+
+  # ===== 主链（confirmed 前进路径 · 10 条显式前向边）=====
+  # L0 需求文档 → 需求层对抗
+  - 需求接收者（校验） → 需求审计者
+  # 需求审计通过 → 需求文档定稿（L1）
+  - 需求审计者 → 需求文档管理者
+  # L1 需求规格 → L2 架构设计
+  - 需求文档管理者 → 架构师
+  # L2 架构方案 → 架构层对抗
+  - 架构师 → 架构审计者
+  # 架构审计通过 → 技术文档定稿（L3，文档先行）
+  - 架构审计者 → 技术文档管理者
+  # L3 技术文档 → L4 代码实现（文档即契约）
+  - 技术文档管理者 → 代码生成者
+  # L4 代码 → 质量层对抗
+  - 代码生成者（校验） → 校验者
+  # 质量校验通过 → 部署文档定稿（L5）
+  - 校验者 → 部署文档管理者
+  # L5 部署文档 → 终审
+  - 部署文档管理者 → 综合裁决者
+  # 终审通过 → 交付
+  - 综合裁决者 → 完成
+
+  # ===== producer 自校验 loop（局部回退 · 自纠错回路 · 不设 max_executions）=====
+
+  - 需求接收者（校验） → 需求接收者 when: result.verdict == "loop"
+  - 代码生成者（校验） → 代码生成者 when: result.verdict == "loop"
+
+  # ===== 对抗回退边（三层对抗 + 缺陷定向回退 · 全局回退设 max_executions）=====
+
+  # 需求层对抗回退
+  - 需求审计者 → 需求接收者 when: result.verdict == "challenged" max_executions: 3
+
+  # 架构层对抗回退
+  - 架构审计者 → 架构师 when: result.verdict == "challenged" max_executions: 3
+
+  # 质量层对抗回退（四维路由：代码/技术文档/需求文档/前进）
+  - 校验者 → 代码生成者 when: result.verdict == "BLOCKING" max_executions: 3
+  - 校验者 → 技术文档管理者 when: result.verdict == "DOC_DEFECT" max_executions: 3
+  - 校验者 → 需求文档管理者 when: result.verdict == "REQ_DOC_DEFECT" max_executions: 3
+
+  # ===== 终审定向回退边（全局回退 · 综合裁决者发现深层缺陷）=====
+
+  - 综合裁决者 → 架构师 when: result.verdict == "challenged" max_executions: 2
+  - 综合裁决者 → 需求文档管理者 when: result.verdict == "requirement_defect" max_executions: 1
+  - 综合裁决者 → 部署文档管理者 when: result.verdict == "deploy_doc_defect" max_executions: 2

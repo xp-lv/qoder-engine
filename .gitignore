@@ -1,0 +1,14 @@
+# 运行时数据（每台电脑本地产生，不同步）
+runtime/
+
+# 工作区（运行时产出，不同步）
+Z_工作区/
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# Hook 运行时日志
+.qoder/hooks/_hook_debug.log
+.qoder/hooks/_hook_error.log
+.qoder/hooks/_hook2_role.log

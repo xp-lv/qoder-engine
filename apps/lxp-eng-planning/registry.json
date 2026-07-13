@@ -1,0 +1,926 @@
+[
+  {
+    "role_name": "需求接收者",
+    "skill_path": "roles/需求接收者/skill.md",
+    "blocking_mode": "manual",
+    "role_type": "producer",
+    "outputs": [
+      {
+        "name": "需求文档",
+        "path": "00-需求描述.md",
+        "type": "deliverable"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true,
+        "text_validation": {
+          "min_size": 50
+        }
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "principles": "roles/需求接收者/principles.md",
+    "input_groups": [
+      [
+        "需求接收者-validate"
+      ],
+      [
+        "需求审计者"
+      ],
+      [
+        "需求接收者"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "需求接收者（校验）",
+    "skill_path": "roles/需求接收者_校验_/skill.md",
+    "blocking_mode": "auto",
+    "role_type": "standard",
+    "outputs": [
+      {
+        "name": "需求接收者校验报告",
+        "path": "outputs/需求接收者-validation.json",
+        "type": "deliverable"
+      }
+    ],
+    "inputs": [
+      {
+        "name": "需求文档",
+        "path": "00-需求描述.md",
+        "type": "deliverable"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true,
+        "rules": [
+          {
+            "type": "field_exists",
+            "field": "result.verdict",
+            "must_be_non_empty": true,
+            "description": "校验角色必须输出 result.verdict"
+          }
+        ]
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "principles": "roles/需求接收者/principles.md",
+    "input_groups": [
+      [
+        "需求接收者"
+      ],
+      [
+        "需求接收者-validate"
+      ]
+    ],
+    "verdicts": [
+      "confirmed",
+      "loop"
+    ]
+  },
+  {
+    "role_name": "需求文档管理者",
+    "skill_path": "roles/需求文档管理者/skill.md",
+    "blocking_mode": "auto",
+    "role_type": "standard",
+    "outputs": [
+      {
+        "name": "需求规格文档",
+        "path": "outputs/需求规格文档.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "用户故事",
+        "path": "outputs/用户故事.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "验收标准清单",
+        "path": "outputs/验收标准清单.md",
+        "type": "deliverable"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true,
+        "text_validation": {
+          "min_size": 50
+        }
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "需求文档",
+        "path": "00-需求描述.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "需求审计报告",
+        "path": "outputs/需求审计报告.json",
+        "type": "process"
+      },
+      {
+        "name": "校验报告",
+        "path": "outputs/校验报告.json",
+        "type": "process"
+      },
+      {
+        "name": "最终裁决书",
+        "path": "outputs/最终裁决书.md                     # [可选输入] 综合裁决者 requirement_defect 回退时存在",
+        "type": "deliverable"
+      },
+      {
+        "name": "文档驱动开发方法论",
+        "path": "knowledge/文档驱动开发方法论.md",
+        "type": "knowledge"
+      },
+      {
+        "name": "精力管理领域知识",
+        "path": "knowledge/精力管理领域知识.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "需求审计者"
+      ],
+      [
+        "校验者"
+      ],
+      [
+        "综合裁决者"
+      ],
+      [
+        "需求文档管理者"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "架构师",
+    "skill_path": "roles/架构师/skill.md",
+    "blocking_mode": "auto",
+    "role_type": "standard",
+    "outputs": [
+      {
+        "name": "App架构文件",
+        "path": "app.yaml",
+        "type": "deliverable"
+      },
+      {
+        "name": "架构说明",
+        "path": "outputs/架构说明.md",
+        "type": "deliverable"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true,
+        "text_validation": {
+          "min_size": 50
+        }
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "需求规格文档",
+        "path": "outputs/需求规格文档.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "用户故事",
+        "path": "outputs/用户故事.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "验收标准清单",
+        "path": "outputs/验收标准清单.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "架构审计报告",
+        "path": "outputs/架构审计报告.json",
+        "type": "process"
+      },
+      {
+        "name": "最终裁决书",
+        "path": "outputs/最终裁决书.md                     # [可选输入] 综合裁决者 challenged 回退时存在",
+        "type": "deliverable"
+      },
+      {
+        "name": "编排范式",
+        "path": "knowledge/编排范式.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "需求文档管理者"
+      ],
+      [
+        "架构审计者"
+      ],
+      [
+        "综合裁决者"
+      ],
+      [
+        "架构师"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "技术文档管理者",
+    "skill_path": "roles/技术文档管理者/skill.md",
+    "blocking_mode": "auto",
+    "role_type": "standard",
+    "outputs": [
+      {
+        "name": "技术设计文档",
+        "path": "outputs/技术设计文档.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "API文档",
+        "path": "outputs/API文档.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "数据库设计文档",
+        "path": "outputs/数据库设计文档.md",
+        "type": "deliverable"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true,
+        "text_validation": {
+          "min_size": 50
+        }
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "App架构文件",
+        "path": "app.yaml",
+        "type": "deliverable"
+      },
+      {
+        "name": "架构说明",
+        "path": "outputs/架构说明.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "需求规格文档",
+        "path": "outputs/需求规格文档.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "校验报告",
+        "path": "outputs/校验报告.json",
+        "type": "process"
+      },
+      {
+        "name": "前端拖拽交互最佳实践",
+        "path": "knowledge/前端拖拽交互最佳实践.md",
+        "type": "knowledge"
+      },
+      {
+        "name": "树形数据结构存储优化",
+        "path": "knowledge/树形数据结构存储优化.md",
+        "type": "knowledge"
+      },
+      {
+        "name": "文档驱动开发方法论",
+        "path": "knowledge/文档驱动开发方法论.md",
+        "type": "knowledge"
+      },
+      {
+        "name": "精力管理领域知识",
+        "path": "knowledge/精力管理领域知识.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "架构审计者"
+      ],
+      [
+        "校验者"
+      ],
+      [
+        "技术文档管理者"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "部署文档管理者",
+    "skill_path": "roles/部署文档管理者/skill.md",
+    "blocking_mode": "auto",
+    "role_type": "standard",
+    "outputs": [
+      {
+        "name": "部署指南",
+        "path": "outputs/部署指南.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "运维手册",
+        "path": "outputs/运维手册.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "变更日志",
+        "path": "outputs/CHANGELOG.md",
+        "type": "deliverable"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true,
+        "text_validation": {
+          "min_size": 50
+        }
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "前端代码",
+        "path": "outputs/src/frontend/",
+        "type": "deliverable"
+      },
+      {
+        "name": "后端代码",
+        "path": "outputs/src/backend/",
+        "type": "deliverable"
+      },
+      {
+        "name": "部署配置",
+        "path": "outputs/docker-compose.yml",
+        "type": "deliverable"
+      },
+      {
+        "name": "校验报告",
+        "path": "outputs/校验报告.json",
+        "type": "process"
+      },
+      {
+        "name": "App架构文件",
+        "path": "app.yaml",
+        "type": "deliverable"
+      },
+      {
+        "name": "最终裁决书",
+        "path": "outputs/最终裁决书.md                     # [可选输入] 综合裁决者 deploy_doc_defect 回退时存在",
+        "type": "deliverable"
+      },
+      {
+        "name": "文档驱动开发方法论",
+        "path": "knowledge/文档驱动开发方法论.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "校验者"
+      ],
+      [
+        "综合裁决者"
+      ],
+      [
+        "部署文档管理者"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "代码生成者",
+    "skill_path": "roles/代码生成者/skill.md",
+    "blocking_mode": "auto",
+    "role_type": "producer",
+    "outputs": [
+      {
+        "name": "前端代码",
+        "path": "outputs/src/frontend/",
+        "type": "deliverable"
+      },
+      {
+        "name": "后端代码",
+        "path": "outputs/src/backend/",
+        "type": "deliverable"
+      },
+      {
+        "name": "数据库Schema",
+        "path": "outputs/prisma/schema.prisma",
+        "type": "deliverable"
+      },
+      {
+        "name": "部署配置",
+        "path": "outputs/docker-compose.yml",
+        "type": "deliverable"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true,
+        "text_validation": {
+          "min_size": 50
+        }
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "技术设计文档",
+        "path": "outputs/技术设计文档.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "API文档",
+        "path": "outputs/API文档.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "数据库设计文档",
+        "path": "outputs/数据库设计文档.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "App架构文件",
+        "path": "app.yaml",
+        "type": "deliverable"
+      },
+      {
+        "name": "校验报告",
+        "path": "outputs/校验报告.json",
+        "type": "process"
+      },
+      {
+        "name": "前端拖拽交互最佳实践",
+        "path": "knowledge/前端拖拽交互最佳实践.md",
+        "type": "knowledge"
+      },
+      {
+        "name": "树形数据结构存储优化",
+        "path": "knowledge/树形数据结构存储优化.md",
+        "type": "knowledge"
+      },
+      {
+        "name": "精力管理领域知识",
+        "path": "knowledge/精力管理领域知识.md",
+        "type": "knowledge"
+      }
+    ],
+    "principles": "roles/代码生成者/principles.md",
+    "input_groups": [
+      [
+        "技术文档管理者"
+      ],
+      [
+        "代码生成者-validate"
+      ],
+      [
+        "校验者"
+      ],
+      [
+        "代码生成者"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "代码生成者（校验）",
+    "skill_path": "roles/代码生成者_校验_/skill.md",
+    "blocking_mode": "auto",
+    "role_type": "standard",
+    "outputs": [
+      {
+        "name": "代码生成者校验报告",
+        "path": "outputs/代码生成者-validation.json",
+        "type": "deliverable"
+      }
+    ],
+    "inputs": [
+      {
+        "name": "前端代码",
+        "path": "outputs/src/frontend/",
+        "type": "deliverable"
+      },
+      {
+        "name": "后端代码",
+        "path": "outputs/src/backend/",
+        "type": "deliverable"
+      },
+      {
+        "name": "数据库Schema",
+        "path": "outputs/prisma/schema.prisma",
+        "type": "deliverable"
+      },
+      {
+        "name": "部署配置",
+        "path": "outputs/docker-compose.yml",
+        "type": "deliverable"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true,
+        "rules": [
+          {
+            "type": "field_exists",
+            "field": "result.verdict",
+            "must_be_non_empty": true,
+            "description": "校验角色必须输出 result.verdict"
+          }
+        ]
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "principles": "roles/代码生成者/principles.md",
+    "input_groups": [
+      [
+        "代码生成者"
+      ],
+      [
+        "代码生成者-validate"
+      ]
+    ],
+    "verdicts": [
+      "confirmed",
+      "loop"
+    ]
+  },
+  {
+    "role_name": "需求审计者",
+    "skill_path": "roles/需求审计者/skill.md",
+    "blocking_mode": "auto",
+    "role_type": "standard",
+    "outputs": [
+      {
+        "name": "需求审计报告",
+        "path": "outputs/需求审计报告.json",
+        "type": "process"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true,
+        "text_validation": {
+          "min_size": 50
+        }
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "需求文档",
+        "path": "00-需求描述.md",
+        "type": "deliverable"
+      }
+    ],
+    "input_groups": [
+      [
+        "需求接收者-validate"
+      ],
+      [
+        "需求审计者"
+      ]
+    ],
+    "verdicts": [
+      "challenged",
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "架构审计者",
+    "skill_path": "roles/架构审计者/skill.md",
+    "blocking_mode": "auto",
+    "role_type": "standard",
+    "outputs": [
+      {
+        "name": "架构审计报告",
+        "path": "outputs/架构审计报告.json",
+        "type": "process"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true,
+        "text_validation": {
+          "min_size": 50
+        }
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "App架构文件",
+        "path": "app.yaml",
+        "type": "deliverable"
+      },
+      {
+        "name": "架构说明",
+        "path": "outputs/架构说明.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "需求规格文档",
+        "path": "outputs/需求规格文档.md",
+        "type": "deliverable"
+      }
+    ],
+    "input_groups": [
+      [
+        "架构师"
+      ],
+      [
+        "架构审计者"
+      ]
+    ],
+    "verdicts": [
+      "challenged",
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "校验者",
+    "skill_path": "roles/校验者/skill.md",
+    "blocking_mode": "auto",
+    "role_type": "standard",
+    "outputs": [
+      {
+        "name": "校验报告",
+        "path": "outputs/校验报告.json",
+        "type": "process"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true,
+        "text_validation": {
+          "min_size": 50
+        }
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "前端代码",
+        "path": "outputs/src/frontend/",
+        "type": "deliverable"
+      },
+      {
+        "name": "后端代码",
+        "path": "outputs/src/backend/",
+        "type": "deliverable"
+      },
+      {
+        "name": "数据库Schema",
+        "path": "outputs/prisma/schema.prisma",
+        "type": "deliverable"
+      },
+      {
+        "name": "部署配置",
+        "path": "outputs/docker-compose.yml",
+        "type": "deliverable"
+      },
+      {
+        "name": "技术设计文档",
+        "path": "outputs/技术设计文档.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "API文档",
+        "path": "outputs/API文档.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "数据库设计文档",
+        "path": "outputs/数据库设计文档.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "需求规格文档",
+        "path": "outputs/需求规格文档.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "用户故事",
+        "path": "outputs/用户故事.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "验收标准清单",
+        "path": "outputs/验收标准清单.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "校验标准手册",
+        "path": "knowledge/校验标准手册.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "代码生成者-validate"
+      ],
+      [
+        "校验者"
+      ]
+    ],
+    "verdicts": [
+      "BLOCKING",
+      "DOC_DEFECT",
+      "REQ_DOC_DEFECT",
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "综合裁决者",
+    "skill_path": "roles/综合裁决者/skill.md",
+    "blocking_mode": "manual",
+    "role_type": "standard",
+    "outputs": [
+      {
+        "name": "最终裁决书",
+        "path": "outputs/最终裁决书.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "构建报告",
+        "path": "outputs/构建报告.md",
+        "type": "deliverable"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true,
+        "text_validation": {
+          "min_size": 50
+        }
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "需求规格文档",
+        "path": "outputs/需求规格文档.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "用户故事",
+        "path": "outputs/用户故事.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "验收标准清单",
+        "path": "outputs/验收标准清单.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "App架构文件",
+        "path": "app.yaml",
+        "type": "deliverable"
+      },
+      {
+        "name": "架构说明",
+        "path": "outputs/架构说明.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "技术设计文档",
+        "path": "outputs/技术设计文档.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "API文档",
+        "path": "outputs/API文档.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "数据库设计文档",
+        "path": "outputs/数据库设计文档.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "校验报告",
+        "path": "outputs/校验报告.json",
+        "type": "process"
+      },
+      {
+        "name": "部署指南",
+        "path": "outputs/部署指南.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "运维手册",
+        "path": "outputs/运维手册.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "变更日志",
+        "path": "outputs/CHANGELOG.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "校验标准手册",
+        "path": "knowledge/校验标准手册.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "部署文档管理者"
+      ],
+      [
+        "综合裁决者"
+      ]
+    ],
+    "verdicts": [
+      "challenged",
+      "confirmed",
+      "deploy_doc_defect",
+      "requirement_defect"
+    ]
+  }
+]
