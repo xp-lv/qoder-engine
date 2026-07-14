@@ -41,7 +41,7 @@ def main():
                 s = json.load(f)
             state_snapshot = {
                 "executing": list(s.get("step_status", {}).keys()),
-                "completed": list(s.get("finished", {}).keys()),
+                "completed": list(s.get("completed", s.get("finished", {})).keys()),
                 "terminal": s.get("terminal_state"),
             }
         except Exception:

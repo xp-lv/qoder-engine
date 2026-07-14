@@ -115,9 +115,53 @@ def load_router_and_registry(app_path):
 
 # ─── Phase 1: dispatch（Fetch）───
 
+def _get_completed(st):
+    """v4.1: 获取 completed（JOIN 权威源）。兼容旧格式 finished。"""
+    return st.get("completed", st.get("finished", {}))
+
+def _get_pending_routes(st):
+    """v4.1: 获取 pending_routes（瞬态路由信号）。兼容旧格式 finished。"""
+    pr = st.get("pending_routes")
+    if pr is not None:
+        return pr
+    # 兼容旧格式：无 pending_routes 时回退到 finished
+    return st.get("finished", st.get("completed", {}))
+
+def _clear_pending_routes(state_path, st):
+    """v4.1: 清空 pending_routes（路由完成后调用）。"""
+    if "pending_routes" in st:
+        st["pending_routes"] = {}
+        save_state_locked(state_path, st)
+    elif "finished" in st:
+        # 兼容旧格式：无 pending_routes 时清空 finished
+        st["finished"] = {}
+        save_state_locked(state_path, st)
+
+def _process_dispatch_pipeline(dispatches, st, app_path):
+    """v4.1 统一管道：converge → dedup → return。
+    去重作为管道的结构性不变量，所有 dispatch 生成路径必须经过此管道。
+    """
+    # Step 1: 全局汇集（JOIN 检查）
+    filtered = _global_converge(dispatches, st, app_path)
+
+    # Step 2: 强制去重（结构性不变量）
+    seen = set()
+    unique = []
+    for d in filtered:
+        key = d.get("step", "")
+        if key not in seen:
+            seen.add(key)
+            unique.append(d)
+
+    return unique
+
 def phase_dispatch(state_path, app_path, workspace_id, from_steps, on_result, task_request):
-    """v4.0: 统一调度入口。优先读 pending_dispatches 缓存，无缓存时调 router。
-    router per-target join 检查统一处理并行/单步/嵌套。
+    """v4.1: 统一调度入口。优先读 pending_dispatches 缓存，无缓存时从 pending_routes 路由。
+
+    v4.1 核心变更：
+    - 路由信号从 pending_routes 读取（瞬态，路由后清空）
+    - JOIN 判断从 completed 读取（持久，整个执行期间保留）
+    - 这两个职责不再共享同一数据结构，消除多源冲突
     """
 
     st = load_state(state_path)
@@ -128,71 +172,56 @@ def phase_dispatch(state_path, app_path, workspace_id, from_steps, on_result, ta
         st["pending_dispatches"] = None
         save_state_locked(state_path, st)
         dispatches = pending
-        # 消费 finished（用完即消除，与 router 路径一致）
-        consumed = set(d["step"] for d in dispatches)
-        finished = st.get("finished", {})
-        for step in list(finished.keys()):
-            if step in consumed:
-                del finished[step]
-        st["finished"] = finished
-        save_state_locked(state_path, st)
+        # 消费 pending_routes（瞬态信号，用完即清空）
+        _clear_pending_routes(state_path, st)
         _process_dispatches(state_path, app_path, workspace_id, dispatches, from_steps or [], task_request, st)
         return
 
-    # ── 冷路径：无 from_steps 时，从所有 finished 步骤出发路由 ──
-    # 每个 finished 步骤可能 verdict 不同，需逐个路由再合并 dispatch
-    if not from_steps:
-        finished = st.get("finished", {})
-        if finished:
-            all_dispatches = []
-            all_complete = False
-            for fin_step, fin_data in finished.items():
-                fin_verdict = fin_data.get("verdict", "confirmed")
-                router_cmd = [
-                    "python3", "engine/scripts/router.py",
-                    "--state-path", state_path, "--app-path", app_path,
-                    "--on", fin_verdict,
-                    "--from", json.dumps([fin_step]),
-                ]
-                if workspace_id:
-                    router_cmd += ["--workspace-id", workspace_id]
-                if task_request:
-                    router_cmd += ["--task-request", task_request]
-                ok, rt_result = run_script(router_cmd)
-                if not ok:
-                    output_error("OIC-E010", f"router.py 失败: {rt_result}")
-                rt_dispatches = rt_result.get("dispatch_instructions", [])
-                if rt_dispatches:
-                    all_dispatches.extend(rt_dispatches)
-                elif rt_result.get("message") == "all_complete":
-                    all_complete = True
+    # ── 冷路径：从 pending_routes（瞬态路由信号）出发路由 ──
+    pending_routes = _get_pending_routes(st)
+    if not from_steps and pending_routes:
+        all_dispatches = []
+        all_complete = False
+        for route_step, route_data in pending_routes.items():
+            route_verdict = route_data.get("verdict", "confirmed")
+            router_cmd = [
+                "python3", "engine/scripts/router.py",
+                "--state-path", state_path, "--app-path", app_path,
+                "--on", route_verdict,
+                "--from", json.dumps([route_step]),
+            ]
+            if workspace_id:
+                router_cmd += ["--workspace-id", workspace_id]
+            if task_request:
+                router_cmd += ["--task-request", task_request]
+            ok, rt_result = run_script(router_cmd)
+            if not ok:
+                output_error("OIC-E010", f"router.py 失败: {rt_result}")
+            rt_dispatches = rt_result.get("dispatch_instructions", [])
+            if rt_dispatches:
+                all_dispatches.extend(rt_dispatches)
+            elif rt_result.get("message") == "all_complete":
+                all_complete = True
 
-            # 全局汇集过滤
-            if all_dispatches:
-                all_dispatches = _global_converge(all_dispatches, st, app_path)
+        # 统一管道：converge → dedup
+        all_dispatches = _process_dispatch_pipeline(all_dispatches, st, app_path)
 
-            if not all_dispatches:
-                if all_complete:
-                    mark_complete(state_path)
-                    output({"status": "success", "next": "complete", "reason": "all_complete"})
-                else:
-                    output({"status": "success", "next": "wait", "reason": "no_dispatchable_steps"})
+        if not all_dispatches:
+            # 清空 pending_routes（已路由完毕，无 dispatch 产出）
+            _clear_pending_routes(state_path, st)
+            if all_complete:
+                mark_complete(state_path)
+                output({"status": "success", "next": "complete", "reason": "all_complete"})
+            else:
+                output({"status": "success", "next": "wait", "reason": "no_dispatchable_steps"})
 
-            # 清除被消费的 finished 标志（用完即消除）
-            consumed = set(d["step"] for d in all_dispatches)
-            if consumed:
-                st = load_state(state_path)
-                finished = st.get("finished", {})
-                for step in list(finished.keys()):
-                    if step in consumed:
-                        del finished[step]
-                st["finished"] = finished
-                save_state_locked(state_path, st)
+        # 清空 pending_routes（瞬态信号已消费完毕）
+        _clear_pending_routes(state_path, st)
 
-            _process_dispatches(state_path, app_path, workspace_id, all_dispatches, [], task_request, st)
-            return
+        _process_dispatches(state_path, app_path, workspace_id, all_dispatches, [], task_request, st)
+        return
 
-    # ── 热路径：有 from_steps 或初始调度（无 finished）──
+    # ── 热路径：有 from_steps 或初始调度（无 pending_routes）──
     router_cmd = ["python3", "engine/scripts/router.py", "--state-path", state_path, "--app-path", app_path, "--on", on_result]
     if workspace_id:
         router_cmd += ["--workspace-id", workspace_id]
@@ -207,9 +236,9 @@ def phase_dispatch(state_path, app_path, workspace_id, from_steps, on_result, ta
     dispatches = router_result.get("dispatch_instructions", [])
     message = router_result.get("message", "")
 
-    # ── 全局汇集：检查 input_groups + 用完即清除 ──
+    # ── 全局汇集 + 去重（统一管道）──
     if dispatches and from_steps:
-        dispatches = _global_converge(dispatches, st, app_path)
+        dispatches = _process_dispatch_pipeline(dispatches, st, app_path)
 
     if not dispatches:
         if message == "all_complete":
@@ -218,32 +247,20 @@ def phase_dispatch(state_path, app_path, workspace_id, from_steps, on_result, ta
         else:
             output({"status": "success", "next": "wait", "reason": message or "no_dispatchable_steps"})
 
-    # dispatch 产出后，清除被消费的 finished 标志（用完即消除）
-    consumed = set()
-    for d in dispatches:
-        consumed.add(d["step"])
-    if consumed:
-        st = load_state(state_path)
-        finished = st.get("finished", {})
-        for step in list(finished.keys()):
-            if step in consumed:
-                del finished[step]
-        st["finished"] = finished
-        save_state_locked(state_path, st)
-
     _process_dispatches(state_path, app_path, workspace_id, dispatches, from_steps or [], task_request, st)
 
 def _global_converge(dispatches, st, app_path):
-    """全局汇集：读 registry 的 input_groups 判断每个候选是否满足执行条件。
-    
-    input_groups 中存的是 step id（编译器统一），与 STATE.json finished keys 对齐。
-    
+    """v4.1 全局汇集：读 registry 的 input_groups 判断每个候选是否满足执行条件。
+
+    v4.1 核心变更：JOIN 判断从 completed（持久权威源）读取，而非 finished。
+    completed 在整个执行期间保留，不被路由消费清除。
+
     规则：
     - input_groups 为空/不存在 → 无前置依赖 → 放行
-    - 任一组的全部来源都在 finished 中 → 放行
+    - 任一组的全部来源都在 completed 中 → 放行
     - 否则 → 等待
     """
-    finished_set = set(st.get("finished", {}).keys())
+    completed_set = set(_get_completed(st).keys())
     
     reg_path = os.path.join(app_path, "registry.json")
     if not os.path.exists(reg_path):
@@ -257,7 +274,7 @@ def _global_converge(dispatches, st, app_path):
     filtered = []
     for d in dispatches:
         groups = role_input_groups.get(d.get("role", ""), [])
-        if not groups or any(set(g).issubset(finished_set) for g in groups):
+        if not groups or any(set(g).issubset(completed_set) for g in groups):
             filtered.append(d)
     
     return filtered

@@ -210,11 +210,13 @@ def _print_error(error, action="error"):
 
 
 def _check_idempotent(state, dispatch_id):
-    """检查 dispatch_id 是否已处理（已 advance 到 finished）。"""
+    """检查 dispatch_id 是否已处理（已 advance 到 completed）。"""
     if not dispatch_id:
         return False
 
-    for ckpt_data in (state.get("finished", {}) or {}).values():
+    # v4.1: 读 completed（兼容旧格式 finished）
+    completed = state.get("completed", state.get("finished", {})) or {}
+    for ckpt_data in completed.values():
         if isinstance(ckpt_data, dict) and ckpt_data.get("id") == dispatch_id:
             return True
     return False
@@ -341,15 +343,8 @@ def cmd_next(args):
         for d in dispatches:
             prompt = _build_task_prompt(d, args.workspace_id, state_path, app_path)
             task_prompts.append(prompt)
-        # 更新 pending_branch_count
-        if dispatches:
-            try:
-                with open(state_path, "r", encoding="utf-8") as f:
-                    st_write = json.load(f)
-                st_write["pending_branch_count"] = len(dispatches)
-                _save_state_locked(state_path, st_write)
-            except Exception:
-                pass
+        # v4.1: pbc 从 step_status 派生，不再手动设置（消除多源冲突）
+        # pbc = len(dispatches) 的逻辑已移除，Hook② 直接读 len(step_status)
         _print_json({
             "action": "delegate",
             "dispatches": dispatches,
@@ -593,7 +588,7 @@ def cmd_list_workspaces(args):
                 with open(state_f, "r", encoding="utf-8") as f:
                     st = json.load(f)
                 executing = list(st.get("step_status", {}).keys())
-                completed = list(st.get("finished", {}).keys())
+                completed = list(st.get("completed", st.get("finished", {})).keys())
                 terminal = st.get("terminal_state")
                 # 读 APP_REF
                 app_ref_f = os.path.join(ws_base, "APP_REF")

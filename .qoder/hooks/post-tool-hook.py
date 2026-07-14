@@ -418,29 +418,27 @@ def _hook2_log(msg):
 def handle_role_executor_return(tool_output, workspace_id):
     """处理 role-executor 返回。
 
-    核心原则：pbc > 0 时禁止向主 Agent 注入任何信号。
+    v4.1: pbc 从 step_status 实时派生（len(step_status)），不再使用独立计数器。
+    核心原则：step_status 非空时禁止向主 Agent 注入任何信号（仍有分支在执行）。
     所有分支的 submit_next 和 gate_results 缓存到 STATE.json 的 cached_branch_results，
-    pbc == 0 时统一读取全部缓存，按优先级全局决策后注入。
+    step_status 为空时统一读取全部缓存，按优先级全局决策后注入。
     """
 
-    def _decrement_pbc_on_error(sid):
-        """异常退出前递减 pbc，防止工作流永久卡死。"""
+    def _derive_pbc(sid):
+        """v4.1: pbc 从 step_status 派生，不再使用独立计数器。
+        消除多源冲突：step_status 是 set_state.py 唯一写者维护的权威源。
+        rollback 删除 step_status 条目时，pbc 自然递减，无需手动清零。
+        """
         try:
             sp = resolve_ws_state(sid)
             st = load_json_file(sp) or {}
-            p = st.get("pending_branch_count", 0)
-            if p > 0:
-                st["pending_branch_count"] = p - 1
-                if st["pending_branch_count"] == 0:
-                    st["cached_branch_results"] = []
-                _save_state_locked(sp, st)
+            return len(st.get("step_status", {}))
         except Exception:
-            pass
+            return 0
 
     data = extract_json_from_text(tool_output, required_keys=["status"])
     sid_fallback = workspace_id or "default"
     if not data:
-        _decrement_pbc_on_error(sid_fallback)
         emit("BLOCKING：role-executor 返回格式异常，无法解析为 JSON。向用户报告此问题，不要继续推进流程。")
         return
 
@@ -453,11 +451,9 @@ def handle_role_executor_return(tool_output, workspace_id):
 
     # ── 状态检查（非 confirmed 状态直接报告，不缓存）──
     if status == "BLOCKING":
-        _decrement_pbc_on_error(sid)
         emit(f"BLOCKING：role-executor 返回 BLOCKING。向用户报告以下信息：\n{json.dumps(data, ensure_ascii=False)[:500]}")
         return
     if status != "confirmed":
-        _decrement_pbc_on_error(sid)
         emit(f"BLOCKING：role-executor 返回异常状态 '{status}'，向用户报告此问题。")
         return
 
@@ -471,68 +467,54 @@ def handle_role_executor_return(tool_output, workspace_id):
     ]
     if role_verdict:
         submit_args += ["--verdict", role_verdict]
-    # v4.0: 删除 --branch-id 传递（无并行分支）
     submit_result = run_script(submit_args)
     submit_next = submit_result.get("next", "")
     _hook2_log(f"SUBMIT_RESULT: next={submit_next} action={submit_result.get('action','')} gate_results={json.dumps(submit_result.get('gate_results',[]), ensure_ascii=False)[:200]}")
 
-    # submit 失败时递减 pbc 防止卡死
+    # submit 失败时直接报错（pbc 从 step_status 派生，无需手动递减）
     if submit_result.get("action") == "error" or submit_result.get("status") == "error":
-        _decrement_pbc_on_error(sid)
         _err = submit_result.get("error", "submit 失败")
         emit(f"BLOCKING：引擎错误 — {_err}")
         return
 
-    # ── pbc 门控递减 ──
+    # ── pbc 门控（从 step_status 派生）──
     state_path = resolve_ws_state(sid)
     state = load_json_file(state_path) or {}
-    pbc = state.get("pending_branch_count", 0)
-    _hook2_log(f"PBC_CHECK: pbc={pbc} pending_dispatches={state.get('pending_dispatches')} step_status_keys={list(state.get('step_status',{}).keys())}")
+    pbc = _derive_pbc(sid)  # v4.1: 从 step_status 派生
+    _hook2_log(f"PBC_DERIVED: pbc={pbc} pending_dispatches={state.get('pending_dispatches')} step_status_keys={list(state.get('step_status',{}).keys())}")
 
     if pbc > 0:
         # ══════════════════════════════════════════════════════
-        # pbc > 0：仍有并行分支在执行
+        # pbc > 0：仍有并行分支在执行（step_status 非空）
         # ══════════════════════════════════════════════════════
-        pbc -= 1
-        state["pending_branch_count"] = pbc
-
-        # pbc 仍 > 0：缓存当前分支结果，纯静默，等其他分支返回
-        if pbc > 0:
-            cached = state.setdefault("cached_branch_results", [])
-            cached.append({
-                "branch_id": branch_id,
-                "step": step,
-                "submit_next": submit_next,
-                "gate_results": submit_result.get("gate_results", []),
-                "pending": submit_result.get("pending", []),
-                "failed": submit_result.get("failed", []),
-                "reason": submit_result.get("reason", ""),
-            })
-            _save_state_locked(state_path, state)
-            sys.exit(0)
-
-        # pbc == 0：最后一个分支返回，统一决策
-        # 构造 all_results = 当前 submit_result + 之前缓存的分支结果
+        # 缓存当前分支结果，纯静默，等其他分支返回
+        cached = state.setdefault("cached_branch_results", [])
+        cached.append({
+            "branch_id": branch_id,
+            "step": step,
+            "submit_next": submit_next,
+            "gate_results": submit_result.get("gate_results", []),
+            "pending": submit_result.get("pending", []),
+            "failed": submit_result.get("failed", []),
+            "reason": submit_result.get("reason", ""),
+        })
         _save_state_locked(state_path, state)
-        all_results = [submit_result]
-        for c in state.get("cached_branch_results", []):
-            all_results.append({
-                "next": c.get("submit_next", ""),
-                "gate_results": c.get("gate_results", []),
-                "pending": c.get("pending", []),
-                "failed": c.get("failed", []),
-                "reason": c.get("reason", ""),
-            })
+        sys.exit(0)
 
-        # 清空缓存
-        state["cached_branch_results"] = []
-        _save_state_locked(state_path, state)
+    # pbc == 0：最后一个分支返回（step_status 已空），统一决策
+    all_results = [submit_result]
+    for c in state.get("cached_branch_results", []):
+        all_results.append({
+            "next": c.get("submit_next", ""),
+            "gate_results": c.get("gate_results", []),
+            "pending": c.get("pending", []),
+            "failed": c.get("failed", []),
+            "reason": c.get("reason", ""),
+        })
 
-    else:
-        # ══════════════════════════════════════════════════════
-        # pbc 一直为 0：单步模式，all_results 只含当前 submit_result
-        # ══════════════════════════════════════════════════════
-        all_results = [submit_result]
+    # 清空缓存
+    state["cached_branch_results"] = []
+    _save_state_locked(state_path, state)
 
     # ══════════════════════════════════════════════════════
     # pbc == 0：统一决策

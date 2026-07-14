@@ -48,11 +48,12 @@ def output_failure(error_code, message):
 
 def create_initial_state():
     return {
-        "schema_version": "4.0",
+        "schema_version": "4.1",
         "project_id": os.path.basename(os.getcwd()),
         "step_status": {},
         "terminal_state": None,
-        "finished": {},
+        "completed": {},       # 持久：完成记录，_global_converge JOIN 判断的权威源
+        "pending_routes": {},  # 瞬态：待路由信号，advance 写入，路由后清空
         "edge_counts": {},
         "pending_dispatches": None,
         "history": [],
@@ -65,22 +66,36 @@ def validate_action(state, action, step):
         raise ValidationException("OIC-E206", f"终态不可变：terminal_state={state['terminal_state']}")
 
 def do_rollback(state, step):
-    """v4.0: 回退仅清除 step_status，计数由 orchestrator 的 edge_counts 管理。"""
+    """v4.1: 回退清除 step_status + completed + pending_routes + pending_dispatches。
+    pbc 不再需要手动清零——它从 step_status 派生，step_status 清空后 pbc 自然为 0。
+    """
     ss = state.get("step_status", {})
     if step in ss:
         del ss[step]
+    # 同步清理 completed 中的完成记录（消除缺陷3：拓扑不一致）
+    completed = state.get("completed", {})
+    if step in completed:
+        del completed[step]
+    # 清理瞬态路由信号
+    pending_routes = state.get("pending_routes", {})
+    if step in pending_routes:
+        del pending_routes[step]
     state["pending_dispatches"] = None
 
 def do_reset(state):
     state["step_status"] = {}
-    state["finished"] = {}
+    state["completed"] = {}
+    state["pending_routes"] = {}
     state["edge_counts"] = {}
     state["terminal_state"] = None
     state["pending_dispatches"] = None
     state["history"] = []
 
 def do_advance(state, step, role, dispatch_id, verdict=None):
-    """写入 finished（当前阶段已完成）。"""
+    """v4.1: 写入 completed（持久）+ pending_routes（瞬态路由信号）。
+    completed: _global_converge 的 JOIN 判断权威源，整个执行期间保留。
+    pending_routes: phase_dispatch 冷路径的路由信号，路由完成后清空。
+    """
     ss = state.get("step_status", {})
     existing = ss.get(step, {})
     if not dispatch_id:
@@ -96,14 +111,16 @@ def do_advance(state, step, role, dispatch_id, verdict=None):
     }
     if verdict:
         result["verdict"] = verdict
-    state.setdefault("finished", {})[step] = result
+    # 写入两个独立结构（消除多源冲突）
+    state.setdefault("completed", {})[step] = result
+    state.setdefault("pending_routes", {})[step] = result
     state["metadata"]["last_advance_at"] = now_iso()
 
 def do_resume(state, step):
-    finished = state.get("finished", {})
-    if step not in finished:
-        raise ValidationException("OIC-E205", f"无可恢复 finished：{step}")
-    r = finished[step]
+    completed = state.get("completed", {})
+    if step not in completed:
+        raise ValidationException("OIC-E205", f"无可恢复 completed：{step}")
+    r = completed[step]
     state.setdefault("step_status", {})[step] = {
         "role": r.get("role", ""),
         "status": "executing",

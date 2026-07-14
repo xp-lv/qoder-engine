@@ -6,7 +6,7 @@ import argparse, json, os, sys, shutil
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from session_path import (
     resolve_ws_base, resolve_ws_state, resolve_ws_process,
-    derive_ws_id, get_app_name, get_edge_targets,
+    derive_ws_id, get_app_name, get_edge_targets, resolve_workspace_output,
 )
 from datetime import datetime, timezone
 
@@ -175,29 +175,37 @@ def main():
     ws_process = resolve_ws_process(ws_id)
     os.makedirs(ws_process, exist_ok=True)
 
-    # 创建产出物目录（在 workspace_path 中）
-    auto_dirs = set()
+    # 创建产出物目录（按 type 路由到正确位置，与 router.py/step.py 保持一致）
+    auto_dirs_resolved = set()  # 已解析的绝对路径
     for role in registry:
         for o in role.get("outputs", []):
-            out_dir = os.path.dirname(o["path"])
+            o_type = o.get("type", "deliverable")
+            resolved = resolve_workspace_output(ws_id, o["path"], app_path, o_type)
+            out_dir = os.path.dirname(resolved)
             if out_dir:
-                auto_dirs.add(out_dir)
+                auto_dirs_resolved.add(out_dir)
         for inp in role.get("inputs", []):
-            inp_dir = os.path.dirname(inp["path"])
+            inp_type = inp.get("type", "deliverable")
+            resolved = resolve_workspace_output(ws_id, inp["path"], app_path, inp_type)
+            inp_dir = os.path.dirname(resolved)
             if inp_dir:
-                auto_dirs.add(inp_dir)
+                auto_dirs_resolved.add(inp_dir)
 
     manifest_path = os.path.join(app_path, "manifest.json")
     if os.path.exists(manifest_path):
         with open(manifest_path, "r", encoding="utf-8") as f:
             manifest = json.load(f)
         ws_template = manifest.get("workspace_template", {})
-        all_dirs = set(ws_template.get("dirs", [])) | auto_dirs
-        for dir_path in all_dirs:
+        # manifest dirs 是相对路径，join workspace_path
+        for dir_path in ws_template.get("dirs", []):
             full_dir = os.path.join(args.workspace_path, dir_path)
             os.makedirs(full_dir, exist_ok=True)
 
-    # 为 inputs 中的 deliverable/process 文件创建占位骨架（不覆盖已有文件）
+    # auto_dirs_resolved 是按 type 解析后的绝对路径，直接创建
+    for dir_path in auto_dirs_resolved:
+        os.makedirs(dir_path, exist_ok=True)
+
+    # 为 inputs 创建占位骨架（按 type 路由，与 router 的 resolve_workspace_output 一致）
     for role in registry:
         for inp in role.get("inputs", []):
             inp_type = inp.get("type", "deliverable")
@@ -205,7 +213,7 @@ def main():
                 inp_path = inp.get("path", "")
                 if not inp_path:
                     continue
-                full_path = os.path.join(args.workspace_path, inp_path)
+                full_path = resolve_workspace_output(ws_id, inp_path, app_path, inp_type)
                 if not os.path.exists(full_path):
                     os.makedirs(os.path.dirname(full_path), exist_ok=True)
                     placeholder = f"# {inp.get('name', inp_path)}\n\n（待填写）\n"
@@ -225,11 +233,12 @@ def main():
             pass
 
     initial_state = {
-        "schema_version": "4.0",
+        "schema_version": "4.1",
         "workspace_id": ws_id,
         "step_status": {},
         "terminal_state": None,
-        "finished": {},
+        "completed": {},       # v4.1: 持久完成记录（JOIN 判断权威源）
+        "pending_routes": {},  # v4.1: 瞬态路由信号（路由后清空）
         "edge_counts": {},
         "pending_dispatches": None,
         "history": [],

@@ -138,21 +138,25 @@ def _do_jump(state_path, app_path, workspace_id, target_step):
         for k in list(ss.keys()):
             del ss[k]
 
-    # 2. 前置步骤标记为已完成
-    finished = state.setdefault("finished", {})
+    # 2. 前置步骤标记为已完成（v4.1: 写入 completed + pending_routes）
+    completed = state.setdefault("completed", {})
+    pending_routes = state.setdefault("pending_routes", {})
     for i, sid in enumerate(predecessor_steps):
-        if sid not in finished:
-            finished[sid] = {
+        if sid not in completed:
+            entry = {
                 "id": f"ckpt_jump_{sid}_{uuid.uuid4().hex[:8]}",
                 "created_at": now_iso(),
                 "role": router_steps[i].get("role", ""),
                 "jumped_over": True
             }
+            completed[sid] = entry
+            pending_routes[sid] = entry
 
-    # 3. 清除目标步骤及其所有下游步骤的 finished（jump 回退语义）
+    # 3. 清除目标步骤及其所有下游步骤的 completed + pending_routes（jump 回退语义）
     downstream_steps = all_step_ids[target_idx:]
     for sid in downstream_steps:
-        finished.pop(sid, None)
+        completed.pop(sid, None)
+        pending_routes.pop(sid, None)
 
     # 4. 清理 pending_dispatches（让 --next 走正常 router 路径）
     state["pending_dispatches"] = None
