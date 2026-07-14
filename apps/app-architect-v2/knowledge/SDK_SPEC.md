@@ -5,7 +5,7 @@
 > 1. **代码优先**：本文档描述引擎实际行为。所有字段、机制、流程必须与代码一一对应。修改本文档前必须先修改代码并验证。禁止先改文档再追代码。
 > 2. **章节结构不可变**：以下 9 个章节的定义和边界不可增删、不可重排。如需新增内容，只能在现有章节内补充。如需新增章节，必须声明 SDK 大版本升级（v4.0）。
 >    - §1 系统概述 / §2 原子概念 / §3 app.yaml 语法 / §4 编译产物格式 / §5 执行语义 / §6 STATE.json / §7 step.py 接口 / §8 schema.json / §9 Gate 校验
-> 3. **权威分工**：app.yaml 语法在 `01-app-yaml编排范式.md` 中定义，本文档是其编译产物和执行语义的权威补充。
+> 3. **权威分工**：app.yaml 语法在 `编排范式.md` 中定义，本文档是其编译产物和执行语义的权威补充。
 > 4. **版本递增**：编译产物格式有 breaking change 时递增 SDK 版本号。
 
 ---
@@ -94,7 +94,7 @@ edges:               # 路由编排（唯一权威源）
   - A → [B, C]
   - [A, B] → C
   - A → B when: result.verdict == "xxx"
-  - A → B when: result.verdict == "fail" max_executions: 5
+  - A → B when: result.verdict == "xxx" max_executions: 5
   - A → 完成
 ```
 
@@ -131,7 +131,7 @@ edges:               # 路由编排（唯一权威源）
 
 | 功能 | 触发条件 | 行为 |
 |---|---|---|
-| **fail 边生成** | 所有角色 | 自动生成 backward 边回到角色自身（Gate 格式错误只需修正重做），不设 max_executions。app.yaml 中显式声明的 fail 边仍使用 max_executions 默认值 3 |
+| **fail 边生成** | 所有角色 | 自动生成 backward 边回到角色自身（Gate 格式错误只需修正重做），不设 max_executions |
 | **carries 推导** | 所有边 | normal confirmed→gate result；normal custom-verdict→gate result + 源角色 process 产出物；backward→源产出+gate+用户反馈+target自身产出 |
 | **input_groups 计算** | 所有 edges | `[A,B,C]→D` 记录为 AND 组；独立边各自为 OR 组 |
 | **producer 展开** | `type: producer` | 自动创建校验角色 + 校验 step |

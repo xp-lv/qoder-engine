@@ -140,7 +140,10 @@ def validate_app_yaml(roles, edges):
                 errors.append(f"edges: {srcs} → 目标 '{t}' 不存在")
 
     # ── 5. 每个角色至少有一条出去的边（或走向完成）──
+    # 校验者的边由编译器自动生成（边重定向），跳过出边检查
     for r in role_names:
+        if roles.get(r, {}).get("_is_validator"):
+            continue
         has_outgoing = any(r in (e["src"] if isinstance(e["src"], list) else [e["src"]]) for e in edges)
         if not has_outgoing and len(role_names) > 1:
             errors.append(f"角色 '{r}' 没有任何出去的边")
@@ -298,11 +301,18 @@ def compile_app(app_path, force=False):
         sys.exit(1)
 
     # ── 预注册 producer 自动展开的校验角色（供 validate_app_yaml 识别）──
+    # 补全 outputs + _is_validator 标记，确保后续编译流程一致
     for r_name, r_data in list(roles.items()):
         if r_data.get("type") == "producer":
             val_role = f"{r_name}（校验）"
             if val_role not in roles:
-                roles[val_role] = {"type": "standard", "confirm": "auto"}
+                roles[val_role] = {
+                    "type": "standard",
+                    "confirm": "auto",
+                    "_is_validator": True,
+                    "_validator_for": r_name,
+                    "outputs": [{"name": f"{r_name}校验报告", "path": f"outputs/{slugify(r_name)}-validation.json", "type": "deliverable"}],
+                }
 
     # ── 编译期语法校验 ──
     errors = validate_app_yaml(roles, edges_lines)
@@ -313,6 +323,32 @@ def compile_app(app_path, force=False):
         sys.exit(1)
 
     role_names = list(roles.keys())
+
+    # ── 边重定向：producer 的边 → 校验者的边 ──
+    # 用户从 producer 视角写 edges（producer 只负责产出，校验者负责路由决策），
+    # 编译器将 producer 的所有条件边重定向到校验者。
+    # producer 自身只保留自动生成的 confirmed → 校验者。
+    # 如果用户已为校验者显式定义了 edges，不重定向（向后兼容）。
+    for r_name, r_data in list(roles.items()):
+        if r_data.get("type") != "producer":
+            continue
+        val_role = f"{r_name}（校验）"
+        if val_role not in roles:
+            continue
+        # 检查用户是否已为校验者显式定义了 edges
+        val_has_user_edges = any(
+            val_role in (e["src"] if isinstance(e["src"], list) else [e["src"]])
+            for e in edges_lines
+        )
+        if val_has_user_edges:
+            continue
+        # 重定向：将 producer 的所有边源改为校验者
+        for e in edges_lines:
+            if isinstance(e["src"], list):
+                e["src"] = [val_role if s == r_name else s for s in e["src"]]
+            else:
+                if e["src"] == r_name:
+                    e["src"] = val_role
 
     # ── 计算 input_groups（目标视角：每个 role 的前置依赖组）──
     # [A,B,C] → D  : D 得到 input_groups [["A","B","C"]]（组内 AND）
@@ -385,9 +421,8 @@ def compile_app(app_path, force=False):
 
     # ── producer 展开为执行+校验两个 STEP ──
     # producer 角色自动插入一个校验 STEP：执行STEP confirmed → 校验STEP
-    # 校验STEP 有 verdicts=[pass, fail]，pass → 下游，fail → 回执行STEP
+    # 校验STEP 的 confirmed → 下游，Gate FAIL → 回校验STEP自身
     producer_validators = {}  # {执行STEP: (校验STEP, 校验角色名)}
-    validator_edges = []  # 存储需要注入的额外边
     for r in role_order:
         if roles[r].get("type") == "producer":
             exec_step = step_map[r]
@@ -395,20 +430,9 @@ def compile_app(app_path, force=False):
             val_role = f"{r}（校验）"
             step_map[r + "（校验）"] = val_step
             producer_validators[exec_step] = (val_step, val_role, r)
-            # 如果用户已显式定义校验角色，保留用户数据仅追加元数据
-            if val_role in roles:
-                roles[val_role]["_is_validator"] = True
-                roles[val_role]["_validator_for"] = r
-            else:
-                # 用户未定义，用模板创建
-                roles[val_role] = {
-                    "type": "standard",
-                    "confirm": "auto",
-                    "verdicts": ["confirmed", "fail"],
-                    "_is_validator": True,
-                    "_validator_for": r,
-                    "outputs": [{"name": f"{r}校验报告", "path": f"outputs/{slugify(r)}-validation.json", "type": "deliverable"}],
-                }
+            # 校验角色已在预注册阶段创建（含 outputs + _is_validator），此处仅确保标记存在
+            roles[val_role]["_is_validator"] = True
+            roles[val_role]["_validator_for"] = r
 
     # ── ROUTER.json ──
     # transitions 格式：{"targets": [...], "type": "forward|backward", ...元数据}
@@ -419,6 +443,12 @@ def compile_app(app_path, force=False):
         role_data = roles[r]
         transitions = {}
         is_producer = role_data.get("type") == "producer"
+
+        # 模板校验者（无重定向边也无用户定义边）由 producer 展开代码生成，跳过主循环
+        if role_data.get("_is_validator"):
+            val_has_edges = any(e["src"] == r for e in edges_lines)
+            if not val_has_edges:
+                continue
 
         for e in edges_lines:
             if e["src"] != r:
@@ -850,6 +880,9 @@ def compile_app(app_path, force=False):
     # ── 骨架文件 ──
     for r in role_order:
         role_data = roles[r]
+        # 校验者角色由后续专用逻辑生成骨架，此处跳过避免通用模板覆盖
+        if role_data.get("_is_validator"):
+            continue
         role_dir = slugify(r)
         role_full = os.path.join(app_path, "roles", role_dir)
         os.makedirs(role_full, exist_ok=True)
@@ -925,7 +958,7 @@ def compile_app(app_path, force=False):
         val_skill_f = os.path.join(val_full, "skill.md")
         if not os.path.exists(val_skill_f):
             with open(val_skill_f, "w", encoding="utf-8") as f:
-                f.write(f"# {r} 校验执行指令\n\n## 执行步骤\n1. Read 上游产出物（输入文件）\n2. 逐项检查原则文档中的校验清单\n3. 输出校验报告\n\n## 输出格式\n返回 JSON，包含 result.verdict（confirmed/fail）\n")
+                f.write(f"# {r} 校验执行指令\n\n## 执行步骤\n1. Read 上游产出物（输入文件）\n2. 逐项检查原则文档中的校验清单\n3. 输出校验报告\n\n## 输出格式\n返回 JSON，包含 result.verdict（confirmed/loop）\n\n## verdict 判定规则\n- `confirmed`：校验通过\n- `loop`：校验未通过，回退上游角色修正\n")
 
         # 校验 schema 是派生文件，普通编译和 --force 编译都全量重新生成
         # verdict enum = 用户定义的边 verdicts + confirmed（fail 为系统保留，不写入 enum）
@@ -1002,16 +1035,30 @@ def check_app(app_path, strict=False):
                 role_to_schemas[r["role_name"]] = load_json(sf)
             except Exception:
                 pass
+    # 构建 input_groups 映射（用于 CROSS_BRANCH_LEAK 的部分 JOIN 过滤）
+    role_input_groups = {r["role_name"]: r.get("input_groups", []) for r in registry} if registry else {}
+    step_to_role = {s["step"]: s["role"] for s in steps}
 
     # ── 构建图 ──
-    forward_adj = {s["step"]: [] for s in steps}  # forward 边邻接表
+    forward_adj = {s["step"]: [] for s in steps}  # forward 边邻接表（含所有 forward 边）
+    forward_adj_unbounded = {s["step"]: [] for s in steps}  # forward 边邻接表（排除有界循环边）
     backward_adj = {s["step"]: [] for s in steps}  # backward 边邻接表
+    bounded_edges = set()  # {(src, tgt) | transition 有 max_executions}
     all_targets = {s["step"]: {} for s in steps}  # {step: {key: [targets]}}
     all_sources = {s["step"]: {} for s in steps}  # 反向：{step: {key: [sources]}}
 
     for s in steps:
         sid = s["step"]
-        for key, targets, type_str in _unpack_transitions(s.get("transitions", {})):
+        trans = s.get("transitions", {})
+        for key, val in trans.items():
+            if isinstance(val, dict):
+                targets = val.get("targets", [])
+                type_str = val.get("type", "normal")
+                max_exec = val.get("max_executions")
+            else:
+                targets = val if isinstance(val, list) else []
+                type_str = "normal"
+                max_exec = None
             all_targets[sid][key] = targets
             is_bw = (type_str == "backward")
             for t in targets:
@@ -1026,6 +1073,10 @@ def check_app(app_path, strict=False):
                         backward_adj[sid].append(t)
                     else:
                         forward_adj[sid].append(t)
+                        if max_exec:
+                            bounded_edges.add((sid, t))
+                        else:
+                            forward_adj_unbounded[sid].append(t)
 
     # ── E2: 不可达节点 ──
     # 可达性分析：沿 forward 边 BFS
@@ -1056,17 +1107,17 @@ def check_app(app_path, strict=False):
             errors.append({"code": "UNREACHABLE", "step": s["step"],
                            "message": f"{s['step']} 从 entry 不可达"})
 
-    # ── 终态检测：任何 forward verdict 的 targets 为空则算终态 ──
+    # ── 终态检测：任一 forward verdict 的 targets 为空则该步可到达终态 ──
     terminal_steps = set()
     for s in steps:
         sid = s["step"]
         unpacked = _unpack_transitions(s.get("transitions", {}))
-        # 所有 forward 转换的 targets 都为空 → 终态
+        # 任一 forward transition 的 targets 为空 → 该步可直接到达终态
         forward_trans = [(ks, t_list) for ks, t_list, ts in unpacked if ts == "normal"]
         if not forward_trans:
-            # 没有 forward 边的节点 → 检查是否有非终态的 backward/loop（纯中间态不算终态）
+            # 没有 forward 边的节点 → 检查是否有非终态的 backward（纯中间态不算终态）
             continue
-        if all(len(t_list) == 0 for _, t_list in forward_trans):
+        if any(len(t_list) == 0 for _, t_list in forward_trans):
             terminal_steps.add(sid)
 
     # ── E3: 终态不可达 / E4: 死循环 ──
@@ -1132,6 +1183,12 @@ def check_app(app_path, strict=False):
                     if cn in can_reach_terminal:
                         cycle_can_exit = True
                         break
+                # 检查环中是否有有界边（max_executions），有界环不是死循环
+                if not cycle_can_exit:
+                    for i in range(len(cycle) - 1):
+                        if (cycle[i], cycle[i + 1]) in bounded_edges:
+                            cycle_can_exit = True
+                            break
                 if not cycle_can_exit:
                     for cn in cycle[:-1]:
                         visited_cycle.add(cn)
@@ -1153,18 +1210,19 @@ def check_app(app_path, strict=False):
         dfs_cycle(sid)
 
     # ── E5: 跨分支泄漏（CROSS_BRANCH_LEAK）──
-    # 找所有 fork 点（forward 边 >1 目标）
+    # 使用 forward_adj_unbounded（排除有 max_executions 的边）避免伪环路掩盖真实拓扑
+    # 结合 input_groups 识别合法的部分 JOIN，通过屏障图过滤误报
     fork_points = []
     for s in steps:
         sid = s["step"]
         for key, targets, type_str in _unpack_transitions(s.get("transitions", {})):
             if type_str == "normal" and len(targets) > 1:
                 fork_points.append((sid, targets))
-    # join 点是合法的公共汇聚，不应报泄漏
+    
     for fork_step, fork_targets in fork_points:
         if len(fork_targets) < 2:
             continue
-        # 计算每个分支的可达集
+        # 使用无界邻接图计算每个分支的可达集
         branch_reach = {}
         for bt in fork_targets:
             reach = set()
@@ -1174,45 +1232,80 @@ def check_app(app_path, strict=False):
                 if cur in reach:
                     continue
                 reach.add(cur)
-                for nxt in forward_adj.get(cur, []):
+                for nxt in forward_adj_unbounded.get(cur, []):
                     if nxt not in reach:
                         queue.append(nxt)
             branch_reach[bt] = reach
-        # 计算合法 join 点：所有分支都能到达的节点
-        common_join = None
+    
+        # 计算 step → 可达它的 fork 分支集合
+        step_branches = {}
         for bt, reach in branch_reach.items():
-            if common_join is None:
-                common_join = set(reach)
-            else:
-                common_join &= reach
-        # 检查分支间是否有泄漏：某分支的内部节点被另一个分支可达
-        branch_list = list(branch_reach.keys())
-        for i in range(len(branch_list)):
-            for j in range(i + 1, len(branch_list)):
-                bi = branch_list[i]
-                bj = branch_list[j]
-                leak = branch_reach[bi].intersection(branch_reach[bj])
-                for lk in leak:
-                    # 排除 fork 点本身
-                    if lk == fork_step:
-                        continue
-                    # 如果 lk 是公共 join（所有分支都能到）且不在 fork_targets 中 → 合法
-                    if lk in common_join and lk not in fork_targets:
-                        continue
-                    # 如果 lk 是公共 join 且在 fork_targets 中 → 需检查是否被非直接前驱可达
-                    if lk in fork_targets:
-                        # lk 是另一个分支的根，但被当前分支可达 → 泄漏
-                        err = {"code": "CROSS_BRANCH_LEAK", "step": str(lk),
-                               "message": f"分支泄漏：{fork_step} fork 后，分支 {bi} 可达另一分支根 {lk}"}
-                        if err not in errors:
-                            errors.append(err)
-                        continue
-                    # lk 不是公共 join 也不是 fork_target → 泄漏
-                    if lk not in common_join:
-                        err = {"code": "CROSS_BRANCH_LEAK", "step": str(lk),
-                               "message": f"分支泄漏：{fork_step} fork 后，{lk} 被多个分支可达"}
-                        if err not in errors:
-                            errors.append(err)
+            for s_id in reach:
+                step_branches.setdefault(s_id, set()).add(bt)
+    
+        # 计算合法公共 join 点：所有分支都能到达的节点（排除 fork target 自身，它们是分支根而非汇聚点）
+        fork_target_set = set(fork_targets)
+        common_join = set(branch_reach[fork_targets[0]])
+        for ft in fork_targets[1:]:
+            common_join &= branch_reach[ft]
+        common_join -= fork_target_set
+        
+        # 识别合法的部分 JOIN：input_groups 中存在组，其成员跨越 ≥2 个 fork 分支
+        legit_partial_joins = set()
+        for s_id in step_branches:
+            if len(step_branches[s_id]) < 2:
+                continue
+            role = step_to_role.get(s_id, "")
+            groups = role_input_groups.get(role, [])
+            for g in groups:
+                group_branches = set()
+                for member in g:
+                    if member in fork_target_set:
+                        group_branches.add(member)
+                    elif member in step_branches:
+                        group_branches |= step_branches[member]
+                if len(group_branches) >= 2:
+                    legit_partial_joins.add(s_id)
+                    break
+    
+        # 构建屏障图：移除合法 JOIN 节点（含公共 JOIN 和部分 JOIN）
+        # 在屏障图中，如果一个节点仍被 ≥2 分支可达，则为真实泄漏
+        all_legit_joins = common_join | legit_partial_joins
+        barrier_reach = {}
+        for bt in fork_targets:
+            reach = set()
+            queue = [bt]
+            while queue:
+                cur = queue.pop()
+                if cur in reach:
+                    continue
+                reach.add(cur)
+                for nxt in forward_adj_unbounded.get(cur, []):
+                    if nxt not in all_legit_joins and nxt not in reach:
+                        queue.append(nxt)
+            barrier_reach[bt] = reach
+    
+        # 检测真实泄漏：屏障图中被 ≥2 分支可达的节点
+        barrier_step_branches = {}
+        for bt, reach in barrier_reach.items():
+            for s_id in reach:
+                barrier_step_branches.setdefault(s_id, set()).add(bt)
+    
+        for lk, branches in barrier_step_branches.items():
+            if len(branches) < 2:
+                continue
+            if lk == fork_step:
+                continue
+            if lk in fork_targets:
+                err = {"code": "CROSS_BRANCH_LEAK", "step": str(lk),
+                       "message": f"分支泄漏：{fork_step} fork 后，分支 {branches} 可达另一分支根 {lk}"}
+                if err not in errors:
+                    errors.append(err)
+                continue
+            err = {"code": "CROSS_BRANCH_LEAK", "step": str(lk),
+                   "message": f"分支泄漏：{fork_step} fork 后，{lk} 被多个分支可达且无合法 JOIN 声明"}
+            if err not in errors:
+                errors.append(err)
 
     # ── E6: 内层 join 晚于外层 join ──
     # 拓扑排序
@@ -1254,7 +1347,7 @@ def check_app(app_path, strict=False):
                 if cur in reach:
                     continue
                 reach.add(cur)
-                for nxt in forward_adj.get(cur, []):
+                for nxt in forward_adj_unbounded.get(cur, []):
                     if nxt not in reach:
                         queue.append(nxt)
             branch_join_steps[bt] = reach
@@ -1287,7 +1380,7 @@ def check_app(app_path, strict=False):
                                 if cur in reach:
                                     continue
                                 reach.add(cur)
-                                for nxt in forward_adj.get(cur, []):
+                                for nxt in forward_adj_unbounded.get(cur, []):
                                     if nxt not in reach:
                                         queue.append(nxt)
                             sub_branch_reach[sbt] = reach
@@ -1344,7 +1437,7 @@ def check_app(app_path, strict=False):
                 if cur in reach:
                     continue
                 reach.add(cur)
-                for nxt in forward_adj.get(cur, []):
+                for nxt in forward_adj_unbounded.get(cur, []):
                     if nxt not in reach:
                         queue.append(nxt)
             branch_reach[bt] = reach
@@ -1379,7 +1472,7 @@ def check_app(app_path, strict=False):
             schema_enum = set(verdict_prop.get("enum", []))
             unpacked = _unpack_transitions(s.get("transitions", {}))
             trans_keys = {k for k, _, _ in unpacked}
-            # 标准内置 key（confirmed=forward 内置，fail/loop=backward 内置）
+            # 标准内置 key（confirmed=forward 内置，fail=backward 内置）
             builtin_keys = FORWARD_BUILTIN | {"fail", "loop"}
             # 非标准 key = 条件路由的自定义 verdict
             non_std_trans = {k for k, _, ts in unpacked if k not in builtin_keys and ts == "normal"}
@@ -1409,7 +1502,7 @@ def check_app(app_path, strict=False):
                 if cur in reach:
                     continue
                 reach.add(cur)
-                for nxt in forward_adj.get(cur, []):
+                for nxt in forward_adj_unbounded.get(cur, []):
                     if nxt not in reach:
                         queue.append(nxt)
             branch_reach[bt] = reach
@@ -1430,7 +1523,7 @@ def check_app(app_path, strict=False):
                     if cur in reach:
                         continue
                     reach.add(cur)
-                    for nxt in forward_adj.get(cur, []):
+                    for nxt in forward_adj_unbounded.get(cur, []):
                         if nxt not in reach:
                             queue.append(nxt)
                 cand_reach[jc] = reach
@@ -1465,7 +1558,7 @@ def check_app(app_path, strict=False):
                 if cur in reach:
                     continue
                 reach.add(cur)
-                for nxt in forward_adj.get(cur, []):
+                for nxt in forward_adj_unbounded.get(cur, []):
                     if nxt not in reach:
                         queue.append(nxt)
             # 检查可达集中是否有 fork 点

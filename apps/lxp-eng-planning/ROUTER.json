@@ -45,136 +45,894 @@
       }
     },
     {
-      "step": "需求文档管理者",
-      "role": "需求文档管理者",
+      "step": "需求审计者",
+      "role": "需求审计者",
       "transitions": {
         "confirmed": {
           "targets": [
-            "架构师"
+            "需求分流者"
           ],
           "type": "normal",
           "carries": [
             {
-              "path": "outputs/需求文档管理者-gate-result.json",
+              "path": "outputs/需求审计者-gate-result.json",
               "type": "deliverable",
-              "name": "[上游Gate结果] 需求文档管理者"
+              "name": "[上游Gate结果] 需求审计者"
+            }
+          ]
+        },
+        "challenged": {
+          "targets": [
+            "需求接收者"
+          ],
+          "type": "normal",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "outputs/需求审计者-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 需求审计者"
+            },
+            {
+              "path": "outputs/需求审计报告.json",
+              "type": "deliverable",
+              "name": "[上游分析] 需求审计报告"
             }
           ]
         },
         "fail": {
           "targets": [
-            "需求文档管理者"
+            "需求审计者"
           ],
           "type": "backward",
           "carries": [
             {
-              "path": "outputs/需求规格文档.md",
+              "path": "outputs/需求审计报告.json",
               "type": "feedback",
-              "name": "[反馈] 需求规格文档"
+              "name": "[反馈] 需求审计报告"
             },
             {
-              "path": "outputs/用户故事.md",
+              "path": "outputs/需求审计者-gate-result.json",
               "type": "feedback",
-              "name": "[反馈] 用户故事"
-            },
-            {
-              "path": "outputs/验收标准清单.md",
-              "type": "feedback",
-              "name": "[反馈] 验收标准清单"
-            },
-            {
-              "path": "outputs/需求文档管理者-gate-result.json",
-              "type": "feedback",
-              "name": "[反馈] 需求文档管理者 Gate校验结果"
+              "name": "[反馈] 需求审计者 Gate校验结果"
             }
           ]
         }
       }
     },
     {
-      "step": "架构师",
-      "role": "架构师",
+      "step": "需求分流者",
+      "role": "需求分流者",
       "transitions": {
         "confirmed": {
           "targets": [
-            "架构审计者"
+            "前端文档管理者",
+            "后端文档管理者"
           ],
           "type": "normal",
           "carries": [
             {
-              "path": "outputs/架构师-gate-result.json",
+              "path": "outputs/需求分流者-gate-result.json",
               "type": "deliverable",
-              "name": "[上游Gate结果] 架构师"
+              "name": "[上游Gate结果] 需求分流者"
             }
           ]
         },
         "fail": {
           "targets": [
-            "架构师"
+            "需求分流者"
           ],
           "type": "backward",
           "carries": [
             {
-              "path": "app.yaml",
+              "path": "outputs/前端需求摘要.md",
               "type": "feedback",
-              "name": "[反馈] App架构文件"
+              "name": "[反馈] 前端需求摘要"
             },
             {
-              "path": "outputs/架构说明.md",
+              "path": "outputs/后端需求摘要.md",
               "type": "feedback",
-              "name": "[反馈] 架构说明"
+              "name": "[反馈] 后端需求摘要"
             },
             {
-              "path": "outputs/架构师-gate-result.json",
+              "path": "outputs/需求分流者-gate-result.json",
               "type": "feedback",
-              "name": "[反馈] 架构师 Gate校验结果"
+              "name": "[反馈] 需求分流者 Gate校验结果"
             }
           ]
         }
       }
     },
     {
-      "step": "技术文档管理者",
-      "role": "技术文档管理者",
+      "step": "前端文档管理者",
+      "role": "前端文档管理者",
       "transitions": {
         "confirmed": {
           "targets": [
-            "代码生成者"
+            "交叉审核者"
           ],
           "type": "normal",
           "carries": [
             {
-              "path": "outputs/技术文档管理者-gate-result.json",
+              "path": "outputs/前端文档管理者-gate-result.json",
               "type": "deliverable",
-              "name": "[上游Gate结果] 技术文档管理者"
+              "name": "[上游Gate结果] 前端文档管理者"
             }
           ]
         },
         "fail": {
           "targets": [
-            "技术文档管理者"
+            "前端文档管理者"
           ],
           "type": "backward",
           "carries": [
             {
-              "path": "outputs/技术设计文档.md",
+              "path": "outputs/前端需求规格文档.md",
               "type": "feedback",
-              "name": "[反馈] 技术设计文档"
+              "name": "[反馈] 前端需求规格文档"
             },
             {
-              "path": "outputs/API文档.md",
+              "path": "outputs/前端交互规范.md",
               "type": "feedback",
-              "name": "[反馈] API文档"
+              "name": "[反馈] 前端交互规范"
             },
+            {
+              "path": "outputs/前端文档管理者-gate-result.json",
+              "type": "feedback",
+              "name": "[反馈] 前端文档管理者 Gate校验结果"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "后端文档管理者",
+      "role": "后端文档管理者",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "交叉审核者"
+          ],
+          "type": "normal",
+          "carries": [
+            {
+              "path": "outputs/后端文档管理者-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 后端文档管理者"
+            }
+          ]
+        },
+        "fail": {
+          "targets": [
+            "后端文档管理者"
+          ],
+          "type": "backward",
+          "carries": [
+            {
+              "path": "outputs/后端需求规格文档.md",
+              "type": "feedback",
+              "name": "[反馈] 后端需求规格文档"
+            },
+            {
+              "path": "outputs/后端业务逻辑文档.md",
+              "type": "feedback",
+              "name": "[反馈] 后端业务逻辑文档"
+            },
+            {
+              "path": "outputs/后端文档管理者-gate-result.json",
+              "type": "feedback",
+              "name": "[反馈] 后端文档管理者 Gate校验结果"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "交叉审核者",
+      "role": "交叉审核者",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "交互逻辑设计师",
+            "美学布局设计师",
+            "接口翻译师",
+            "后端架构设计师",
+            "数据模型设计师"
+          ],
+          "type": "normal",
+          "carries": [
+            {
+              "path": "outputs/交叉审核者-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 交叉审核者"
+            }
+          ]
+        },
+        "FRONTEND_DOC_DEFECT": {
+          "targets": [
+            "前端文档管理者"
+          ],
+          "type": "normal",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "outputs/交叉审核者-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 交叉审核者"
+            },
+            {
+              "path": "outputs/交叉审核报告.json",
+              "type": "deliverable",
+              "name": "[上游分析] 交叉审核报告"
+            }
+          ]
+        },
+        "BACKEND_DOC_DEFECT": {
+          "targets": [
+            "后端文档管理者"
+          ],
+          "type": "normal",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "outputs/交叉审核者-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 交叉审核者"
+            },
+            {
+              "path": "outputs/交叉审核报告.json",
+              "type": "deliverable",
+              "name": "[上游分析] 交叉审核报告"
+            }
+          ]
+        },
+        "BOTH_DOC_DEFECT": {
+          "targets": [
+            "前端文档管理者",
+            "后端文档管理者"
+          ],
+          "type": "normal",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "outputs/交叉审核者-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 交叉审核者"
+            },
+            {
+              "path": "outputs/交叉审核报告.json",
+              "type": "deliverable",
+              "name": "[上游分析] 交叉审核报告"
+            }
+          ]
+        },
+        "fail": {
+          "targets": [
+            "交叉审核者"
+          ],
+          "type": "backward",
+          "carries": [
+            {
+              "path": "outputs/交叉审核报告.json",
+              "type": "feedback",
+              "name": "[反馈] 交叉审核报告"
+            },
+            {
+              "path": "outputs/交叉审核者-gate-result.json",
+              "type": "feedback",
+              "name": "[反馈] 交叉审核者 Gate校验结果"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "交互逻辑设计师",
+      "role": "交互逻辑设计师",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "前端实现者"
+          ],
+          "type": "normal",
+          "carries": [
+            {
+              "path": "outputs/交互逻辑设计师-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 交互逻辑设计师"
+            }
+          ]
+        },
+        "fail": {
+          "targets": [
+            "交互逻辑设计师"
+          ],
+          "type": "backward",
+          "carries": [
+            {
+              "path": "outputs/交互逻辑设计文档.md",
+              "type": "feedback",
+              "name": "[反馈] 交互逻辑设计文档"
+            },
+            {
+              "path": "outputs/交互逻辑设计师-gate-result.json",
+              "type": "feedback",
+              "name": "[反馈] 交互逻辑设计师 Gate校验结果"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "美学布局设计师",
+      "role": "美学布局设计师",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "前端实现者"
+          ],
+          "type": "normal",
+          "carries": [
+            {
+              "path": "outputs/美学布局设计师-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 美学布局设计师"
+            }
+          ]
+        },
+        "fail": {
+          "targets": [
+            "美学布局设计师"
+          ],
+          "type": "backward",
+          "carries": [
+            {
+              "path": "outputs/美学布局设计文档.md",
+              "type": "feedback",
+              "name": "[反馈] 美学布局设计文档"
+            },
+            {
+              "path": "outputs/美学布局设计师-gate-result.json",
+              "type": "feedback",
+              "name": "[反馈] 美学布局设计师 Gate校验结果"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "接口翻译师",
+      "role": "接口翻译师",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "API契约设计师",
+            "前端实现者"
+          ],
+          "type": "normal",
+          "carries": [
+            {
+              "path": "outputs/接口翻译师-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 接口翻译师"
+            }
+          ]
+        },
+        "fail": {
+          "targets": [
+            "接口翻译师"
+          ],
+          "type": "backward",
+          "carries": [
+            {
+              "path": "outputs/接口翻译文档.md",
+              "type": "feedback",
+              "name": "[反馈] 接口翻译文档"
+            },
+            {
+              "path": "outputs/接口翻译师-gate-result.json",
+              "type": "feedback",
+              "name": "[反馈] 接口翻译师 Gate校验结果"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "后端架构设计师",
+      "role": "后端架构设计师",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "后端实现者"
+          ],
+          "type": "normal",
+          "carries": [
+            {
+              "path": "outputs/后端架构设计师-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 后端架构设计师"
+            }
+          ]
+        },
+        "fail": {
+          "targets": [
+            "后端架构设计师"
+          ],
+          "type": "backward",
+          "carries": [
+            {
+              "path": "outputs/后端架构设计文档.md",
+              "type": "feedback",
+              "name": "[反馈] 后端架构设计文档"
+            },
+            {
+              "path": "outputs/后端架构设计师-gate-result.json",
+              "type": "feedback",
+              "name": "[反馈] 后端架构设计师 Gate校验结果"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "数据模型设计师",
+      "role": "数据模型设计师",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "后端实现者"
+          ],
+          "type": "normal",
+          "carries": [
+            {
+              "path": "outputs/数据模型设计师-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 数据模型设计师"
+            }
+          ]
+        },
+        "fail": {
+          "targets": [
+            "数据模型设计师"
+          ],
+          "type": "backward",
+          "carries": [
             {
               "path": "outputs/数据库设计文档.md",
               "type": "feedback",
               "name": "[反馈] 数据库设计文档"
             },
             {
-              "path": "outputs/技术文档管理者-gate-result.json",
+              "path": "outputs/数据模型设计师-gate-result.json",
               "type": "feedback",
-              "name": "[反馈] 技术文档管理者 Gate校验结果"
+              "name": "[反馈] 数据模型设计师 Gate校验结果"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "API契约设计师",
+      "role": "API契约设计师",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "后端实现者"
+          ],
+          "type": "normal",
+          "carries": [
+            {
+              "path": "outputs/API契约设计师-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] API契约设计师"
+            }
+          ]
+        },
+        "fail": {
+          "targets": [
+            "API契约设计师"
+          ],
+          "type": "backward",
+          "carries": [
+            {
+              "path": "outputs/API详细设计文档.md",
+              "type": "feedback",
+              "name": "[反馈] API详细设计文档"
+            },
+            {
+              "path": "outputs/API契约设计师-gate-result.json",
+              "type": "feedback",
+              "name": "[反馈] API契约设计师 Gate校验结果"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "前端实现者",
+      "role": "前端实现者",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "前端实现者-validate"
+          ],
+          "type": "normal",
+          "carries": [
+            {
+              "path": "outputs/前端实现者-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 前端实现者"
+            }
+          ]
+        },
+        "fail": {
+          "targets": [
+            "前端实现者"
+          ],
+          "type": "backward",
+          "carries": [
+            {
+              "path": "outputs/src/frontend/",
+              "type": "feedback",
+              "name": "[反馈] 前端代码"
+            },
+            {
+              "path": "outputs/前端实现者-gate-result.json",
+              "type": "feedback",
+              "name": "[反馈] 前端实现者 Gate校验结果"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "后端实现者",
+      "role": "后端实现者",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "后端实现者-validate"
+          ],
+          "type": "normal",
+          "carries": [
+            {
+              "path": "outputs/后端实现者-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 后端实现者"
+            }
+          ]
+        },
+        "fail": {
+          "targets": [
+            "后端实现者"
+          ],
+          "type": "backward",
+          "carries": [
+            {
+              "path": "outputs/src/backend/",
+              "type": "feedback",
+              "name": "[反馈] 后端代码"
+            },
+            {
+              "path": "outputs/prisma/schema.prisma",
+              "type": "feedback",
+              "name": "[反馈] 数据库Schema"
+            },
+            {
+              "path": "outputs/docker-compose.yml",
+              "type": "feedback",
+              "name": "[反馈] 部署配置"
+            },
+            {
+              "path": "outputs/后端实现者-gate-result.json",
+              "type": "feedback",
+              "name": "[反馈] 后端实现者 Gate校验结果"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "预览部署者",
+      "role": "预览部署者",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "前端预览确认"
+          ],
+          "type": "normal",
+          "carries": [
+            {
+              "path": "outputs/预览部署者-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 预览部署者"
+            }
+          ]
+        },
+        "fail": {
+          "targets": [
+            "预览部署者"
+          ],
+          "type": "backward",
+          "carries": [
+            {
+              "path": "outputs/预览部署报告.json",
+              "type": "feedback",
+              "name": "[反馈] 预览部署报告"
+            },
+            {
+              "path": "outputs/预览部署者-gate-result.json",
+              "type": "feedback",
+              "name": "[反馈] 预览部署者 Gate校验结果"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "前端预览确认",
+      "role": "前端预览确认",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "全栈联调验证者"
+          ],
+          "type": "normal",
+          "carries": [
+            {
+              "path": "outputs/前端预览确认-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 前端预览确认"
+            }
+          ]
+        },
+        "needs_revision": {
+          "targets": [
+            "交互逻辑设计师",
+            "美学布局设计师"
+          ],
+          "type": "normal",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "outputs/前端预览确认-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 前端预览确认"
+            },
+            {
+              "path": "outputs/前端预览确认报告.json",
+              "type": "deliverable",
+              "name": "[上游分析] 前端预览确认报告"
+            }
+          ]
+        },
+        "fail": {
+          "targets": [
+            "前端预览确认"
+          ],
+          "type": "backward",
+          "carries": [
+            {
+              "path": "outputs/前端预览确认报告.json",
+              "type": "feedback",
+              "name": "[反馈] 前端预览确认报告"
+            },
+            {
+              "path": "outputs/前端预览确认-gate-result.json",
+              "type": "feedback",
+              "name": "[反馈] 前端预览确认 Gate校验结果"
+            },
+            {
+              "path": "outputs/前端预览确认-feedback.json",
+              "type": "feedback",
+              "name": "[反馈] 前端预览确认 用户反馈"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "后端启动验证者",
+      "role": "后端启动验证者",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "全栈联调验证者"
+          ],
+          "type": "normal",
+          "carries": [
+            {
+              "path": "outputs/后端启动验证者-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 后端启动验证者"
+            }
+          ]
+        },
+        "BACKEND_BLOCKING": {
+          "targets": [
+            "后端实现者"
+          ],
+          "type": "normal",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "outputs/后端启动验证者-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 后端启动验证者"
+            },
+            {
+              "path": "outputs/后端启动验证报告.json",
+              "type": "deliverable",
+              "name": "[上游分析] 后端启动验证报告"
+            }
+          ]
+        },
+        "fail": {
+          "targets": [
+            "后端启动验证者"
+          ],
+          "type": "backward",
+          "carries": [
+            {
+              "path": "outputs/后端启动验证报告.json",
+              "type": "feedback",
+              "name": "[反馈] 后端启动验证报告"
+            },
+            {
+              "path": "outputs/后端启动验证者-gate-result.json",
+              "type": "feedback",
+              "name": "[反馈] 后端启动验证者 Gate校验结果"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "全栈联调验证者",
+      "role": "全栈联调验证者",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "合并校验者"
+          ],
+          "type": "normal",
+          "carries": [
+            {
+              "path": "outputs/全栈联调验证者-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 全栈联调验证者"
+            }
+          ]
+        },
+        "FRONTEND_BLOCKING": {
+          "targets": [
+            "前端实现者"
+          ],
+          "type": "normal",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "outputs/全栈联调验证者-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 全栈联调验证者"
+            },
+            {
+              "path": "outputs/联调验证报告.json",
+              "type": "deliverable",
+              "name": "[上游分析] 联调验证报告"
+            }
+          ]
+        },
+        "BACKEND_BLOCKING": {
+          "targets": [
+            "后端实现者"
+          ],
+          "type": "normal",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "outputs/全栈联调验证者-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 全栈联调验证者"
+            },
+            {
+              "path": "outputs/联调验证报告.json",
+              "type": "deliverable",
+              "name": "[上游分析] 联调验证报告"
+            }
+          ]
+        },
+        "fail": {
+          "targets": [
+            "全栈联调验证者"
+          ],
+          "type": "backward",
+          "carries": [
+            {
+              "path": "outputs/联调验证报告.json",
+              "type": "feedback",
+              "name": "[反馈] 联调验证报告"
+            },
+            {
+              "path": "outputs/全栈联调验证者-gate-result.json",
+              "type": "feedback",
+              "name": "[反馈] 全栈联调验证者 Gate校验结果"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "合并校验者",
+      "role": "合并校验者",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "部署文档管理者"
+          ],
+          "type": "normal",
+          "carries": [
+            {
+              "path": "outputs/合并校验者-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 合并校验者"
+            }
+          ]
+        },
+        "FRONTEND_BLOCKING": {
+          "targets": [
+            "前端实现者"
+          ],
+          "type": "normal",
+          "max_executions": 5,
+          "carries": [
+            {
+              "path": "outputs/合并校验者-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 合并校验者"
+            },
+            {
+              "path": "outputs/合并校验报告.json",
+              "type": "deliverable",
+              "name": "[上游分析] 合并校验报告"
+            }
+          ]
+        },
+        "BACKEND_BLOCKING": {
+          "targets": [
+            "后端实现者"
+          ],
+          "type": "normal",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "outputs/合并校验者-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 合并校验者"
+            },
+            {
+              "path": "outputs/合并校验报告.json",
+              "type": "deliverable",
+              "name": "[上游分析] 合并校验报告"
+            }
+          ]
+        },
+        "fail": {
+          "targets": [
+            "合并校验者"
+          ],
+          "type": "backward",
+          "carries": [
+            {
+              "path": "outputs/合并校验报告.json",
+              "type": "feedback",
+              "name": "[反馈] 合并校验报告"
+            },
+            {
+              "path": "outputs/合并校验者-gate-result.json",
+              "type": "feedback",
+              "name": "[反馈] 合并校验者 Gate校验结果"
             }
           ]
         }
@@ -228,264 +986,6 @@
       }
     },
     {
-      "step": "代码生成者",
-      "role": "代码生成者",
-      "transitions": {
-        "confirmed": {
-          "targets": [
-            "代码生成者-validate"
-          ],
-          "type": "normal",
-          "carries": [
-            {
-              "path": "outputs/代码生成者-gate-result.json",
-              "type": "deliverable",
-              "name": "[上游Gate结果] 代码生成者"
-            }
-          ]
-        },
-        "fail": {
-          "targets": [
-            "代码生成者"
-          ],
-          "type": "backward",
-          "carries": [
-            {
-              "path": "outputs/src/frontend/",
-              "type": "feedback",
-              "name": "[反馈] 前端代码"
-            },
-            {
-              "path": "outputs/src/backend/",
-              "type": "feedback",
-              "name": "[反馈] 后端代码"
-            },
-            {
-              "path": "outputs/prisma/schema.prisma",
-              "type": "feedback",
-              "name": "[反馈] 数据库Schema"
-            },
-            {
-              "path": "outputs/docker-compose.yml",
-              "type": "feedback",
-              "name": "[反馈] 部署配置"
-            },
-            {
-              "path": "outputs/代码生成者-gate-result.json",
-              "type": "feedback",
-              "name": "[反馈] 代码生成者 Gate校验结果"
-            }
-          ]
-        }
-      }
-    },
-    {
-      "step": "需求审计者",
-      "role": "需求审计者",
-      "transitions": {
-        "confirmed": {
-          "targets": [
-            "需求文档管理者"
-          ],
-          "type": "normal",
-          "carries": [
-            {
-              "path": "outputs/需求审计者-gate-result.json",
-              "type": "deliverable",
-              "name": "[上游Gate结果] 需求审计者"
-            }
-          ]
-        },
-        "challenged": {
-          "targets": [
-            "需求接收者"
-          ],
-          "type": "normal",
-          "max_executions": 3,
-          "carries": [
-            {
-              "path": "outputs/需求审计者-gate-result.json",
-              "type": "deliverable",
-              "name": "[上游Gate结果] 需求审计者"
-            },
-            {
-              "path": "outputs/需求审计报告.json",
-              "type": "deliverable",
-              "name": "[上游分析] 需求审计报告"
-            }
-          ]
-        },
-        "fail": {
-          "targets": [
-            "需求审计者"
-          ],
-          "type": "backward",
-          "carries": [
-            {
-              "path": "outputs/需求审计报告.json",
-              "type": "feedback",
-              "name": "[反馈] 需求审计报告"
-            },
-            {
-              "path": "outputs/需求审计者-gate-result.json",
-              "type": "feedback",
-              "name": "[反馈] 需求审计者 Gate校验结果"
-            }
-          ]
-        }
-      }
-    },
-    {
-      "step": "架构审计者",
-      "role": "架构审计者",
-      "transitions": {
-        "confirmed": {
-          "targets": [
-            "技术文档管理者"
-          ],
-          "type": "normal",
-          "carries": [
-            {
-              "path": "outputs/架构审计者-gate-result.json",
-              "type": "deliverable",
-              "name": "[上游Gate结果] 架构审计者"
-            }
-          ]
-        },
-        "challenged": {
-          "targets": [
-            "架构师"
-          ],
-          "type": "normal",
-          "max_executions": 3,
-          "carries": [
-            {
-              "path": "outputs/架构审计者-gate-result.json",
-              "type": "deliverable",
-              "name": "[上游Gate结果] 架构审计者"
-            },
-            {
-              "path": "outputs/架构审计报告.json",
-              "type": "deliverable",
-              "name": "[上游分析] 架构审计报告"
-            }
-          ]
-        },
-        "fail": {
-          "targets": [
-            "架构审计者"
-          ],
-          "type": "backward",
-          "carries": [
-            {
-              "path": "outputs/架构审计报告.json",
-              "type": "feedback",
-              "name": "[反馈] 架构审计报告"
-            },
-            {
-              "path": "outputs/架构审计者-gate-result.json",
-              "type": "feedback",
-              "name": "[反馈] 架构审计者 Gate校验结果"
-            }
-          ]
-        }
-      }
-    },
-    {
-      "step": "校验者",
-      "role": "校验者",
-      "transitions": {
-        "confirmed": {
-          "targets": [
-            "部署文档管理者"
-          ],
-          "type": "normal",
-          "carries": [
-            {
-              "path": "outputs/校验者-gate-result.json",
-              "type": "deliverable",
-              "name": "[上游Gate结果] 校验者"
-            }
-          ]
-        },
-        "BLOCKING": {
-          "targets": [
-            "代码生成者"
-          ],
-          "type": "normal",
-          "max_executions": 3,
-          "carries": [
-            {
-              "path": "outputs/校验者-gate-result.json",
-              "type": "deliverable",
-              "name": "[上游Gate结果] 校验者"
-            },
-            {
-              "path": "outputs/校验报告.json",
-              "type": "deliverable",
-              "name": "[上游分析] 校验报告"
-            }
-          ]
-        },
-        "DOC_DEFECT": {
-          "targets": [
-            "技术文档管理者"
-          ],
-          "type": "normal",
-          "max_executions": 3,
-          "carries": [
-            {
-              "path": "outputs/校验者-gate-result.json",
-              "type": "deliverable",
-              "name": "[上游Gate结果] 校验者"
-            },
-            {
-              "path": "outputs/校验报告.json",
-              "type": "deliverable",
-              "name": "[上游分析] 校验报告"
-            }
-          ]
-        },
-        "REQ_DOC_DEFECT": {
-          "targets": [
-            "需求文档管理者"
-          ],
-          "type": "normal",
-          "max_executions": 3,
-          "carries": [
-            {
-              "path": "outputs/校验者-gate-result.json",
-              "type": "deliverable",
-              "name": "[上游Gate结果] 校验者"
-            },
-            {
-              "path": "outputs/校验报告.json",
-              "type": "deliverable",
-              "name": "[上游分析] 校验报告"
-            }
-          ]
-        },
-        "fail": {
-          "targets": [
-            "校验者"
-          ],
-          "type": "backward",
-          "carries": [
-            {
-              "path": "outputs/校验报告.json",
-              "type": "feedback",
-              "name": "[反馈] 校验报告"
-            },
-            {
-              "path": "outputs/校验者-gate-result.json",
-              "type": "feedback",
-              "name": "[反馈] 校验者 Gate校验结果"
-            }
-          ]
-        }
-      }
-    },
-    {
       "step": "综合裁决者",
       "role": "综合裁决者",
       "transitions": {
@@ -502,24 +1002,10 @@
         },
         "challenged": {
           "targets": [
-            "架构师"
+            "交叉审核者"
           ],
           "type": "normal",
           "max_executions": 2,
-          "carries": [
-            {
-              "path": "outputs/综合裁决者-gate-result.json",
-              "type": "deliverable",
-              "name": "[上游Gate结果] 综合裁决者"
-            }
-          ]
-        },
-        "requirement_defect": {
-          "targets": [
-            "需求文档管理者"
-          ],
-          "type": "normal",
-          "max_executions": 1,
           "carries": [
             {
               "path": "outputs/综合裁决者-gate-result.json",
@@ -623,50 +1109,100 @@
       }
     },
     {
-      "step": "代码生成者-validate",
-      "role": "代码生成者（校验）",
+      "step": "前端实现者-validate",
+      "role": "前端实现者（校验）",
       "transitions": {
         "confirmed": {
           "targets": [
-            "校验者"
+            "预览部署者"
           ],
           "type": "normal",
           "carries": [
             {
-              "path": "outputs/代码生成者-validate-gate-result.json",
+              "path": "outputs/前端实现者-validate-gate-result.json",
               "type": "deliverable",
-              "name": "[上游Gate结果] 代码生成者-validate"
+              "name": "[上游Gate结果] 前端实现者-validate"
             }
           ]
         },
         "loop": {
           "targets": [
-            "代码生成者"
+            "前端实现者"
           ],
           "type": "normal",
           "carries": [
             {
-              "path": "outputs/代码生成者-validate-gate-result.json",
+              "path": "outputs/前端实现者-validate-gate-result.json",
               "type": "deliverable",
-              "name": "[上游Gate结果] 代码生成者-validate"
+              "name": "[上游Gate结果] 前端实现者-validate"
             }
           ]
         },
         "fail": {
           "targets": [
-            "代码生成者-validate"
+            "前端实现者-validate"
           ],
           "type": "backward",
           "carries": [
             {
-              "path": "outputs/代码生成者-validation.json",
+              "path": "outputs/前端实现者-validation.json",
               "type": "feedback",
-              "name": "[反馈] 代码生成者校验报告"
+              "name": "[反馈] 前端实现者校验报告"
             },
             {
-              "path": "outputs/代码生成者-validate-gate-result.json",
+              "path": "outputs/前端实现者-validate-gate-result.json",
               "type": "feedback",
-              "name": "[反馈] 代码生成者-validate Gate校验结果"
+              "name": "[反馈] 前端实现者-validate Gate校验结果"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "后端实现者-validate",
+      "role": "后端实现者（校验）",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "后端启动验证者"
+          ],
+          "type": "normal",
+          "carries": [
+            {
+              "path": "outputs/后端实现者-validate-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 后端实现者-validate"
+            }
+          ]
+        },
+        "loop": {
+          "targets": [
+            "后端实现者"
+          ],
+          "type": "normal",
+          "carries": [
+            {
+              "path": "outputs/后端实现者-validate-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 后端实现者-validate"
+            }
+          ]
+        },
+        "fail": {
+          "targets": [
+            "后端实现者-validate"
+          ],
+          "type": "backward",
+          "carries": [
+            {
+              "path": "outputs/后端实现者-validation.json",
+              "type": "feedback",
+              "name": "[反馈] 后端实现者校验报告"
+            },
+            {
+              "path": "outputs/后端实现者-validate-gate-result.json",
+              "type": "feedback",
+              "name": "[反馈] 后端实现者-validate Gate校验结果"
             }
           ]
         }

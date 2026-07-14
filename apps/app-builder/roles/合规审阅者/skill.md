@@ -13,8 +13,8 @@
 5. 检查每个角色定义字段合规（type / confirm / inputs / outputs）
 6. 检查 edges 使用原子模式正确（单步前进 / 并行扇出 / 同步汇入 / 终态出口）
 7. 检查 when 条件格式规范（result.verdict == "xxx"）
-8. 检查 max_executions 仅用于 backward 边
-9. 检查 `fail` 保留词未被滥用
+8. 检查 max_executions 用于有界循环控制（normal 边的迭代上限和 backward 边的重试上限均合法）
+9. 检查 `fail` 保留词未被滥用：schema.json 的 verdict enum 中不包含 `fail`；edges 的 `when:` 中不使用 `fail` 作为条件路由值
 
 ### schema.json 格式检查
 10. 检查每个 schema.json 包含 result.verdict.enum

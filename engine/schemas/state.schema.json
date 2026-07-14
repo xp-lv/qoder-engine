@@ -1,5 +1,85 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "STATE.json v4.1",
+  "type": "object",
+  "required": ["schema_version", "workspace_id", "step_status", "terminal_state", "completed", "pending_routes", "edge_counts", "pending_dispatches", "history", "metadata"],
+  "properties": {
+    "schema_version": { "type": "string", "enum": ["4.0", "4.1"] },
+    "workspace_id": { "type": "string" },
+    "step_status": {
+      "type": "object",
+      "description": "正在执行或等待确认的步骤。key = step ID（slugified 角色名）",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["role", "status", "dispatch_id"],
+        "properties": {
+          "role": { "type": "string" },
+          "status": { "type": "string", "enum": ["executing", "awaiting_confirmation"] },
+          "dispatch_id": { "type": "string" },
+          "started_at": { "type": "string" },
+          "from_steps": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "terminal_state": { "type": ["string", "null"], "enum": ["completed", "failed", "user_abort", null] },
+    "completed": {
+      "type": "object",
+      "description": "v4.1: 持久完成记录（JOIN 判断权威源）。整个执行期间保留，不被路由消费清除。key = step ID，value = {verdict, role, id}",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "verdict": { "type": "string" },
+          "role": { "type": "string" },
+          "id": { "type": "string" }
+        }
+      }
+    },
+    "pending_routes": {
+      "type": "object",
+      "description": "v4.1: 瞬态路由信号。advance 写入，路由后清空。key = step ID，value = {verdict, role, id}",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "verdict": { "type": "string" },
+          "role": { "type": "string" },
+          "id": { "type": "string" }
+        }
+      }
+    },
+    "edge_counts": {
+      "type": "object",
+      "description": "每条有 max_executions 的边的执行计数。key = 'stepID.verdict'",
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    },
+    "pending_dispatches": {
+      "type": ["array", "null"],
+      "description": "Phase 2/3 产出的下一步 dispatch 缓存，Phase 1 消费。追加写入，非覆盖"
+    },
+    "history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "timestamp": { "type": "string" },
+          "action": { "type": "string" },
+          "step": { "type": "string" },
+          "actor": { "type": "string" },
+          "result": { "type": "string" }
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "started_at": { "type": "string" },
+        "last_advance_at": { "type": ["string", "null"] },
+        "user_request": { "type": "string" }
+      }
+    }
+  }
+}
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "STATE.json v3.1.0",
   "type": "object",
   "required": ["schema_version", "project_id", "step_status", "round_count", "terminal_state", "rework_counts", "loop_counts", "checkpoints", "parallel_block", "pending_dispatches", "history", "metadata"],

@@ -99,7 +99,7 @@ def main():
                     candidates.append(t)
 
     # ─── 判定当前路径类型 ───
-    # backward 边（fail/loop）：回退是强制行为，跳过 join
+    # backward 边（fail/fail_*）：回退是强制行为，跳过 join
     is_backward = False
     if args.from_steps:
         for fs in from_steps:

@@ -16,7 +16,7 @@ app_name: app-modifier
 #              + 综合裁决者（JOIN 汇入）+ 裁决审计者
 #
 # §2  循环回路与 max_executions
-#     a) 验证回退      —— 模拟验证者 fail → 改造执行者（局部回退，默认 max: 3）
+#     a) 验证回退      —— 模拟验证者 defects_detected → 改造执行者（局部回退，默认 max: 3）
 #     b) 改造迭代回路  —— 综合裁决者 needs_revision → 改造分析师  max: 3
 #                        裁决审计者 overturned → 改造分析师        max: 2
 #                        （两条边合计 ≤5，满足验收标准 QUA-1 的总执行次数约束）
@@ -29,7 +29,7 @@ app_name: app-modifier
 #     三路审阅 verdict 统一为 confirmed/issues_found，确保 R8 接收一致格式
 #
 # §4  对抗性设计（三层对抗 + 审计复核）
-#     第一层：模拟验证者（执行层验证）—— validated/fail 二元裁决
+#     第一层：模拟验证者（执行层验证）—— validated/defects_detected 二元裁决
 #     第二层：三路并行审阅（治理层审阅）—— confirmed/issues_found 统一值域
 #     第三层：裁决审计者（全链路复核）—— upheld/overturned 双路径
 #     R9 仅审计 R8 的 confirmed 裁决（放行决策），不审计回退决策
@@ -77,6 +77,7 @@ roles:
 
   # producer 入口角色，confirm: manual（唯一人工确认点）
   # 接收目标 APP 路径 + 改造要求，校验路径有效性，转化为结构化改造需求文档
+  # 自动展开校验角色：confirmed → 改造分析师；loop → 回退改造需求接收者
   # 回退来源：综合裁决者 requirements_revision_needed（全局迭代回路）
   改造需求接收者:
     type: producer
@@ -105,7 +106,7 @@ roles:
   # 按改造方案修改 app.yaml / skill.md / schema.json，重新编译目标 APP
   # 增量修改原则：只修改方案涉及的文件，不重写未触及的文件
   # confirmed → 模拟验证者
-  # 回退来源：模拟验证者 fail（验证回退）
+  # 回退来源：模拟验证者 defects_detected（验证回退）
   改造执行者:
     type: standard
     confirm: auto
@@ -116,7 +117,7 @@ roles:
 
   # 七维 dry-run 校验 + 向后兼容性检查
   # validated → [FORK] 并行扇出到 3 审阅者
-  # fail → 改造执行者（验证回退，局部回退，默认 max: 3）
+  # defects_detected → 改造执行者（验证回退，局部回退，默认 max: 3）
   模拟验证者:
     type: standard
     confirm: auto
@@ -210,11 +211,11 @@ edges:
   # ═══════════════════════════════════════════════════════════════
 
   # producer 自动展开：改造需求接收者 → 改造需求接收者（校验）
-  - 改造需求接收者 → 改造需求接收者（校验）
+  # 以下边从 producer 视角声明，编译器自动重定向到校验角色
 
   # ── 需求校验回路 ──
-  - 改造需求接收者（校验）→ 改造分析师 when: result.verdict == "confirmed"
-  - 改造需求接收者（校验）→ 改造需求接收者 when: result.verdict == "loop"
+  - 改造需求接收者 → 改造分析师 when: result.verdict == "confirmed"
+  - 改造需求接收者 → 改造需求接收者 when: result.verdict == "loop"
 
   # ═══════════════════════════════════════════════════════════════
   # 文档层 → 执行层：R2 → R3 → R4 主链

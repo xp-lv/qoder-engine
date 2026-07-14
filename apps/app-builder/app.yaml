@@ -19,7 +19,7 @@ app_name: app-builder
 #     L7 知识沉淀层 → 知识管理者
 #
 # §2  循环回路与 max_executions
-#     a) 需求校验回路    —— 需求接收者（校验）loop → 需求接收者   max: 5
+#     a) 需求校验回路    —— 需求接收者（校验） loop → 需求接收者   max: 不设（局部回退）
 #     b) 架构迭代回路    —— 裁决审计者 loop/conditional_pass → 架构师  max: 10
 #     c) 需求挑战回路    —— 裁决审计者 req_challenge_upheld → 需求接收者  max: 3
 #     d) 全局迭代       —— 知识管理者 tracked → 需求接收者     max: 3
@@ -38,7 +38,7 @@ app_name: app-builder
 # §5  回退上下文注入（引擎约定行为）
 #     backward 边回退时，系统自动将源角色产出物注入目标角色上下文。
 #     受影响的产出物：
-#       · 需求校验报告 → 需求接收者（校验 fail 时注入）
+#       · 需求校验报告 → 需求接收者（校验 Gate FAIL 时注入）
 #       · 需求红队对抗分析报告 → 裁决审计者 req_challenge_upheld 后注入
 #       · 审阅报告 → 综合裁决者 loop/conditional_pass 后注入架构师
 #       · 压力测试报告 → 裁决审计者 arch_challenge_upheld 后注入架构师
@@ -90,22 +90,13 @@ roles:
 
   # producer 入口角色，confirm: manual
   # 接收用户需求，整理为结构化需求文档
+  # 自动展开校验角色：confirmed → 需求红队；loop → 回退需求接收者
   # 回退来源：校验 loop / 审计者 req_challenge_upheld / 综合裁决者 requirement_defect
   需求接收者:
     type: producer
     confirm: manual
     outputs:
       - 需求文档: 00-需求描述.md
-
-  # producer 自动展开的校验角色
-  # confirmed → 需求红队；loop → 回退需求接收者
-  需求接收者（校验）:
-    type: standard
-    confirm: auto
-    inputs:
-      - 需求文档: 00-需求描述.md
-    outputs:
-      - 需求校验报告: outputs/需求接收者-validation.json, type=process
 
   # 需求层独立对抗性语义分析（§4 第一层对抗）
   # confirmed → 架构师；challenged → 裁决审计者复核
@@ -278,11 +269,11 @@ edges:
   # ═══════════════════════════════════════════════════════════════
 
   # producer 自动展开：需求接收者 → 需求接收者（校验）
-  - 需求接收者 → 需求接收者（校验）
+  # 以下边从 producer 视角声明，编译器自动重定向到校验角色
 
   # ── 需求校验回路（§2a）──
-  - 需求接收者（校验）→ 需求红队 when: result.verdict == "confirmed"
-  - 需求接收者（校验）→ 需求接收者 when: result.verdict == "loop"
+  - 需求接收者 → 需求红队 when: result.verdict == "confirmed"
+  - 需求接收者 → 需求接收者 when: result.verdict == "loop"
 
   # ── 需求红队分支（§4 第一层对抗）──
   # confirmed → 架构师（正向通过，无需审计）

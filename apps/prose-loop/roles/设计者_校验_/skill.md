@@ -6,4 +6,8 @@
 3. 输出校验报告
 
 ## 输出格式
-返回 JSON，包含 result.verdict（confirmed/fail）
+返回 JSON，包含 result.verdict（confirmed/loop）
+
+## verdict 判定规则
+- `confirmed`：校验通过
+- `loop`：校验未通过，回退上游角色修正

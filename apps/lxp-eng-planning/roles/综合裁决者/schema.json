@@ -14,8 +14,7 @@
           "enum": [
             "challenged",
             "confirmed",
-            "deploy_doc_defect",
-            "requirement_defect"
+            "deploy_doc_defect"
           ]
         },
         "summary": {

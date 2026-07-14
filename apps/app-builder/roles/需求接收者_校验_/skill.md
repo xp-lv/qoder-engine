@@ -6,8 +6,8 @@
 3. 输出校验报告
 
 ## 输出格式
-返回 JSON，包含 result.verdict（confirmed/fail）
+返回 JSON，包含 result.verdict（confirmed/loop）
 
 ## verdict 判定规则
-- `confirmed`：需求文档七大要素齐全，无内部矛盾
-- `loop`：需求文档存在可修复的缺陷，回退需求接收者修订
+- `confirmed`：校验通过
+- `loop`：校验未通过，回退上游角色修正

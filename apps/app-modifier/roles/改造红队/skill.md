@@ -34,7 +34,7 @@
 
 #### producer 展开正确性
 - producer 角色是否正确展开为执行 + 校验两步？
-- 校验角色的 confirmed/fail 路由是否正确？
+- 校验角色的 confirmed 路由是否正确？（fail 为系统保留词，由 Gate FAIL 触发，非校验角色输出）
 - 校验角色 inputs 是否继承执行角色 outputs？
 
 #### knowledge inject_to 有效性
@@ -46,7 +46,7 @@
 以"最恶劣条件"为原则，构造以下场景验证健壮性：
 - 同时触发所有 backward 边的极端场景
 - verdict 路由在边界值（max_executions 达到上限）的行为
-- producer 校验角色连续 fail 的极限场景
+- producer 校验角色连续 Gate FAIL 的极限场景
 - 同步汇入（JOIN）中部分角色不完成时的行为
 
 ### 4. 产出对抗分析报告
