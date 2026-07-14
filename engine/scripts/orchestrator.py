@@ -77,9 +77,14 @@ def save_state_locked(state_path, st):
             release_lock(lock_file)
 
 def cache_dispatches(state_path, dispatches):
-    """将 dispatches 缓存到 STATE.json，供 dispatch 阶段读取。"""
+    """将 dispatches 缓存到 STATE.json，供 dispatch 阶段读取。
+    
+    v4.0.1 修复：追加而非覆盖。多个并行分支的 post_execute 可能先后缓存
+    dispatches，覆盖写会导致先缓存的独立目标 dispatch 被后缓存的覆盖丢失。
+    """
     st = load_state(state_path)
-    st["pending_dispatches"] = dispatches
+    existing = st.get("pending_dispatches") or []
+    st["pending_dispatches"] = existing + dispatches
     save_state_locked(state_path, st)
 
 # ─── 状态转换统一 API ───
@@ -134,16 +139,60 @@ def phase_dispatch(state_path, app_path, workspace_id, from_steps, on_result, ta
         _process_dispatches(state_path, app_path, workspace_id, dispatches, from_steps or [], task_request, st)
         return
 
-    
-    # 无 from_steps 时，取最后完成的 finished 作为路由起点
-    # 同时从 finished 中推导正确的 verdict（冷路径不依赖默认值）
+    # ── 冷路径：无 from_steps 时，从所有 finished 步骤出发路由 ──
+    # 每个 finished 步骤可能 verdict 不同，需逐个路由再合并 dispatch
     if not from_steps:
         finished = st.get("finished", {})
         if finished:
-            last_step = list(finished.keys())[-1]
-            from_steps = [last_step]
-            on_result = finished[last_step].get("verdict", "confirmed")
+            all_dispatches = []
+            all_complete = False
+            for fin_step, fin_data in finished.items():
+                fin_verdict = fin_data.get("verdict", "confirmed")
+                router_cmd = [
+                    "python3", "engine/scripts/router.py",
+                    "--state-path", state_path, "--app-path", app_path,
+                    "--on", fin_verdict,
+                    "--from", json.dumps([fin_step]),
+                ]
+                if workspace_id:
+                    router_cmd += ["--workspace-id", workspace_id]
+                if task_request:
+                    router_cmd += ["--task-request", task_request]
+                ok, rt_result = run_script(router_cmd)
+                if not ok:
+                    output_error("OIC-E010", f"router.py 失败: {rt_result}")
+                rt_dispatches = rt_result.get("dispatch_instructions", [])
+                if rt_dispatches:
+                    all_dispatches.extend(rt_dispatches)
+                elif rt_result.get("message") == "all_complete":
+                    all_complete = True
 
+            # 全局汇集过滤
+            if all_dispatches:
+                all_dispatches = _global_converge(all_dispatches, st, app_path)
+
+            if not all_dispatches:
+                if all_complete:
+                    mark_complete(state_path)
+                    output({"status": "success", "next": "complete", "reason": "all_complete"})
+                else:
+                    output({"status": "success", "next": "wait", "reason": "no_dispatchable_steps"})
+
+            # 清除被消费的 finished 标志（用完即消除）
+            consumed = set(d["step"] for d in all_dispatches)
+            if consumed:
+                st = load_state(state_path)
+                finished = st.get("finished", {})
+                for step in list(finished.keys()):
+                    if step in consumed:
+                        del finished[step]
+                st["finished"] = finished
+                save_state_locked(state_path, st)
+
+            _process_dispatches(state_path, app_path, workspace_id, all_dispatches, [], task_request, st)
+            return
+
+    # ── 热路径：有 from_steps 或初始调度（无 finished）──
     router_cmd = ["python3", "engine/scripts/router.py", "--state-path", state_path, "--app-path", app_path, "--on", on_result]
     if workspace_id:
         router_cmd += ["--workspace-id", workspace_id]

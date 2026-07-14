@@ -346,7 +346,7 @@ def cmd_next(args):
             try:
                 with open(state_path, "r", encoding="utf-8") as f:
                     st_write = json.load(f)
-                st_write["pending_branch_count"] = len(dispatches) - 1
+                st_write["pending_branch_count"] = len(dispatches)
                 _save_state_locked(state_path, st_write)
             except Exception:
                 pass
@@ -393,33 +393,69 @@ def cmd_submit(args):
       - rework    : Gate 失败，重试 dispatch 已缓存（role-executor 需重新执行）
       - idempotent: dispatch_id 已处理，跳过
       - error     : 永久失败
+
+    v4.0.1 路径权威源机制：outputs 路径从 registry.json 的权威声明中取，
+    不信任 role-executor 返回的路径（role-executor 可能拼错路径）。
     """
     app_path = resolve_app_path(args.workspace_id, args.app_path)
     state_path = resolve_ws_state(args.workspace_id)
 
-    # ── 解析 outputs（相对路径自动解析为绝对路径）──
-    try:
-        outputs = json.loads(args.outputs) if isinstance(args.outputs, str) else args.outputs
-    except (json.JSONDecodeError, ValueError):
-        _print_error("--outputs 不是有效 JSON")
+    # ── 路径权威源：从 registry.json 读取 output_targets ──
+    # role-executor 返回的 outputs 仅用于记录，不作为路径权威
+    from session_path import resolve_workspace_output
+    step_name = args.step
+    registry_path = os.path.join(app_path, "registry.json")
+    router_path = os.path.join(app_path, "ROUTER.json")
+    ws_id = args.workspace_id or ""
 
-    # 用 WORKSPACE_ROOT 解析 outputs 中的相对路径
-    # role-executor 返回的 path 是工作区相对路径（已含 process/ 前缀），直接拼 WORKSPACE_ROOT
-    from session_path import resolve_ws_base
-    ws_base = resolve_ws_base(args.workspace_id) if args.workspace_id else os.path.dirname(state_path)
-    ws_root = ws_base
-    wr_file = os.path.join(ws_base, "WORKSPACE_ROOT") if ws_base else None
-    if wr_file and os.path.exists(wr_file):
-        with open(wr_file, "r", encoding="utf-8") as f:
-            ws_root = f.read().strip()
-    for i, o in enumerate(outputs):
-        # 兼容字符串格式：role-executor 可能返回 ["/path"] 而非 [{"name":"...","path":"..."}]
-        if isinstance(o, str):
-            o = {"path": o}
-            outputs[i] = o
-        p = o.get("path", "")
-        if p and not os.path.isabs(p):
-            o["path"] = os.path.join(ws_root, p)
+    authoritative_outputs = []
+    try:
+        with open(router_path, "r", encoding="utf-8") as f:
+            router_data = json.load(f)
+        with open(registry_path, "r", encoding="utf-8") as f:
+            registry_data = json.load(f)
+
+        # 从 ROUTER.json 找到 step → role 映射
+        step_entry = next((s for s in router_data.get("steps", []) if s["step"] == step_name), None)
+        if step_entry:
+            role_name = step_entry["role"]
+            reg_entry = next((r for r in registry_data if r.get("role_name") == role_name), None)
+            if reg_entry:
+                for o in reg_entry.get("outputs", []):
+                    o_type = o.get("type", "deliverable")
+                    resolved = resolve_workspace_output(ws_id, o["path"], app_path, o_type)
+                    authoritative_outputs.append({
+                        "name": o.get("name", ""),
+                        "path": resolved,
+                        "type": o_type
+                    })
+    except Exception:
+        pass  # 读取失败时回退到 role-executor 返回值
+
+    # 如果成功获取权威 outputs，使用它；否则回退到 role-executor 返回值
+    if authoritative_outputs:
+        outputs = authoritative_outputs
+    else:
+        # 回退：解析 role-executor 返回的 outputs（相对路径自动解析为绝对路径）
+        try:
+            outputs = json.loads(args.outputs) if isinstance(args.outputs, str) else args.outputs
+        except (json.JSONDecodeError, ValueError):
+            _print_error("--outputs 不是有效 JSON")
+
+        from session_path import resolve_ws_base
+        ws_base = resolve_ws_base(args.workspace_id) if args.workspace_id else os.path.dirname(state_path)
+        ws_root = ws_base
+        wr_file = os.path.join(ws_base, "WORKSPACE_ROOT") if ws_base else None
+        if wr_file and os.path.exists(wr_file):
+            with open(wr_file, "r", encoding="utf-8") as f:
+                ws_root = f.read().strip()
+        for i, o in enumerate(outputs):
+            if isinstance(o, str):
+                o = {"path": o}
+                outputs[i] = o
+            p = o.get("path", "")
+            if p and not os.path.isabs(p):
+                o["path"] = os.path.join(ws_root, p)
 
     # ── 加载 STATE.json ──
     try:

@@ -491,31 +491,29 @@ def handle_role_executor_return(tool_output, workspace_id):
 
     if pbc > 0:
         # ══════════════════════════════════════════════════════
-        # pbc > 0：缓存当前分支结果，不注入任何信号
+        # pbc > 0：仍有并行分支在执行
         # ══════════════════════════════════════════════════════
         pbc -= 1
         state["pending_branch_count"] = pbc
 
-        # 缓存当前分支的 submit_result 关键信息
-        cached = state.setdefault("cached_branch_results", [])
-        cached.append({
-            "branch_id": branch_id,
-            "step": step,
-            "submit_next": submit_next,
-            "gate_results": submit_result.get("gate_results", []),
-            "pending": submit_result.get("pending", []),
-            "failed": submit_result.get("failed", []),
-            "reason": submit_result.get("reason", ""),
-        })
-
-        _save_state_locked(state_path, state)
-
-        # pbc 仍 > 0：纯静默，等其他分支返回
+        # pbc 仍 > 0：缓存当前分支结果，纯静默，等其他分支返回
         if pbc > 0:
+            cached = state.setdefault("cached_branch_results", [])
+            cached.append({
+                "branch_id": branch_id,
+                "step": step,
+                "submit_next": submit_next,
+                "gate_results": submit_result.get("gate_results", []),
+                "pending": submit_result.get("pending", []),
+                "failed": submit_result.get("failed", []),
+                "reason": submit_result.get("reason", ""),
+            })
+            _save_state_locked(state_path, state)
             sys.exit(0)
 
-        # pbc == 0：落入下方的统一决策逻辑
-        # 构造 all_results = cached + 当前 submit_result
+        # pbc == 0：最后一个分支返回，统一决策
+        # 构造 all_results = 当前 submit_result + 之前缓存的分支结果
+        _save_state_locked(state_path, state)
         all_results = [submit_result]
         for c in state.get("cached_branch_results", []):
             all_results.append({
@@ -551,38 +549,28 @@ def handle_role_executor_return(tool_output, workspace_id):
         emit(f"BLOCKING：引擎错误 — {all_failed}")
         return
 
-    # ② blocking：有任一分支 awaiting_confirmation → 汇总所有 blocking 信息
+    # ② blocking：有任一分支 awaiting_confirmation → 等待用户确认
+    # 注意：此处严禁调用 --next，否则会消费 pending_dispatches
+    # 导致其他 auto 分支的独立后继变成僵尸步骤。
+    # pending_dispatches 保持不动，由 analyzer Hook② 在用户确认后统一消费。
     state = load_json_file(state_path) or {}
     has_blocking = _scan_awaiting_confirmation(state)
     _hook2_log(f"DECISION: all_submit_nexts={all_submit_nexts} has_blocking={has_blocking}")
     if has_blocking:
-        # 调 --next 获取 pending 列表（引擎汇总全部分支的 awaiting_confirmation）
-        step_result = run_script(["engine/scripts/step.py", "--next", "--workspace-id", sid])
-        action = step_result.get("action", "")
+        # 直接从 STATE.json 扫描 awaiting_confirmation 条目
+        pending_steps = []
+        for s, info in state.get("step_status", {}).items():
+            if isinstance(info, dict) and info.get("status") == "awaiting_confirmation":
+                pending_steps.append({"step": s})
 
-        # 合并所有缓存的 Gate 错误 + 当前 submit_result + --next 结果
         all_gate_errors = _collect_all_gate_errors(all_results)
-        next_gate_errors = format_gate_errors(step_result)
-        combined_gate_errors = "\n".join(
-            e for e in [all_gate_errors, next_gate_errors] if e
-        ) if (all_gate_errors or next_gate_errors) else ""
 
-        if action == "confirm":
-            pending = step_result.get("pending", [])
-            steps_desc = ", ".join(p.get("step", "?") for p in pending)
-            lines = [f"向用户展示确认请求：{steps_desc}。"]
-            if combined_gate_errors:
-                lines.append(f"Gate 详情：{combined_gate_errors}")
-            lines.append("等待用户回复 confirmed 或 fail 后，将用户回复原样传递给 Task(stability-analyzer)。")
-            emit("\n".join(lines))
-        else:
-            # --next 返回了 delegate 而非 confirm，但确实有 awaiting_confirmation
-            # 手动构造 confirm 指令
-            lines = ["向用户展示确认请求。等待用户回复 confirmed 或 fail。"]
-            if combined_gate_errors:
-                lines.append(f"Gate 详情：{combined_gate_errors}")
-            lines.append("等待用户回复 confirmed 或 fail 后，将用户回复原样传递给 Task(stability-analyzer)。")
-            emit("\n".join(lines))
+        steps_desc = ", ".join(p.get("step", "?") for p in pending_steps)
+        lines = [f"向用户展示确认请求：{steps_desc}。"]
+        if all_gate_errors:
+            lines.append(f"Gate 详情：{all_gate_errors}")
+        lines.append("等待用户回复 confirmed 或 fail 后，将用户回复原样传递给 Task(stability-analyzer)。")
+        emit("\n".join(lines))
         return
 
     # ③ complete：所有分支都返回 complete

@@ -97,6 +97,14 @@ def main():
     # ── 1. 物理检查（统一，不区分产物类型）──
     if not os.path.exists(args.output_path):
         fail(f"产出物文件不存在: {args.output_path}")
+
+    # 目录类型产出物（producer 代码目录等）：检查存在且非空即 PASS
+    if os.path.isdir(args.output_path):
+        dir_contents = os.listdir(args.output_path)
+        if not dir_contents:
+            fail(f"产出物目录为空: {args.output_path}")
+        output({"verdict": "PASS", "errors": []})
+
     if os.path.getsize(args.output_path) == 0:
         fail(f"产出物文件为空: {args.output_path}")
 
