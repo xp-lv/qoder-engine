@@ -60,8 +60,8 @@ def main():
     steps_map = {s["step"]: s for s in steps}
     registry_map = {r["role_name"]: r for r in registry}
     executing = set(state.get("step_status", {}).keys())
-    # v4.1: 读 completed（持久权威源，兼容旧格式 finished）
-    finished = set(state.get("completed", state.get("finished", {})).keys())
+    # v4.1: 读 completed（持久权威源）
+    finished = set(state.get("completed", {}).keys())
     user_request = state.get("metadata", {}).get("user_request", "") or args.task_request
 
     # ─── 确定候选目标 STEP ───

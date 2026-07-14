@@ -214,8 +214,8 @@ def _check_idempotent(state, dispatch_id):
     if not dispatch_id:
         return False
 
-    # v4.1: 读 completed（兼容旧格式 finished）
-    completed = state.get("completed", state.get("finished", {})) or {}
+    # v4.1: 读 completed
+    completed = state.get("completed", {}) or {}
     for ckpt_data in completed.values():
         if isinstance(ckpt_data, dict) and ckpt_data.get("id") == dispatch_id:
             return True
@@ -588,7 +588,7 @@ def cmd_list_workspaces(args):
                 with open(state_f, "r", encoding="utf-8") as f:
                     st = json.load(f)
                 executing = list(st.get("step_status", {}).keys())
-                completed = list(st.get("completed", st.get("finished", {})).keys())
+                completed = list(st.get("completed", {}).keys())
                 terminal = st.get("terminal_state")
                 # 读 APP_REF
                 app_ref_f = os.path.join(ws_base, "APP_REF")

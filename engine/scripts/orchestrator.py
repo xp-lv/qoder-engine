@@ -116,35 +116,26 @@ def load_router_and_registry(app_path):
 # ─── Phase 1: dispatch（Fetch）───
 
 def _get_completed(st):
-    """v4.1: 获取 completed（JOIN 权威源）。兼容旧格式 finished。"""
-    return st.get("completed", st.get("finished", {}))
+    """获取 completed（JOIN 权威源，持久完成记录）。"""
+    return st.get("completed", {})
 
 def _get_pending_routes(st):
-    """v4.1: 获取 pending_routes（瞬态路由信号）。兼容旧格式 finished。"""
-    pr = st.get("pending_routes")
-    if pr is not None:
-        return pr
-    # 兼容旧格式：无 pending_routes 时回退到 finished
-    return st.get("finished", st.get("completed", {}))
+    """获取 pending_routes（瞬态路由信号，路由后清空）。"""
+    return st.get("pending_routes", {})
 
 def _clear_pending_routes(state_path, st):
-    """v4.1: 清空 pending_routes（路由完成后调用）。"""
-    if "pending_routes" in st:
-        st["pending_routes"] = {}
-        save_state_locked(state_path, st)
-    elif "finished" in st:
-        # 兼容旧格式：无 pending_routes 时清空 finished
-        st["finished"] = {}
-        save_state_locked(state_path, st)
+    """清空 pending_routes（路由完成后调用）。"""
+    st["pending_routes"] = {}
+    save_state_locked(state_path, st)
 
 def _process_dispatch_pipeline(dispatches, st, app_path):
-    """v4.1 统一管道：converge → dedup → return。
-    去重作为管道的结构性不变量，所有 dispatch 生成路径必须经过此管道。
+    """统一管道：converge → dedup → cross-state filter。
+    所有 dispatch 生成路径必须经过此管道。
     """
-    # Step 1: 全局汇集（JOIN 检查）
+    # Step 1: 全局汇集（JOIN 检查，读 completed）
     filtered = _global_converge(dispatches, st, app_path)
 
-    # Step 2: 强制去重（结构性不变量）
+    # Step 2: 批内去重
     seen = set()
     unique = []
     for d in filtered:
@@ -152,6 +143,10 @@ def _process_dispatch_pipeline(dispatches, st, app_path):
         if key not in seen:
             seen.add(key)
             unique.append(d)
+
+    # Step 3: 跨状态去重（排除已完成的步骤，防止重复 dispatch）
+    completed_set = set(_get_completed(st).keys())
+    unique = [d for d in unique if d.get("step", "") not in completed_set]
 
     return unique
 
