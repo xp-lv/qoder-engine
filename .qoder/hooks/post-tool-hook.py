@@ -375,14 +375,7 @@ def handle_analyzer_return(tool_output, workspace_id):
     emit(f"BLOCKING：扰动分析器返回了未知的 intent='{intent}'，原始数据：{json.dumps(data, ensure_ascii=False)[:300]}")
 
 
-def _scan_awaiting_confirmation(state):
-    """v4.0: 只扫描主线 step_status（无并行分支）。"""
-    for s, info in state.get("step_status", {}).items():
-        if isinstance(info, dict) and info.get("status") == "awaiting_confirmation":
-            return True
-    return False
-
-
+# v4.3: _scan_awaiting_confirmation 已删除（pbc=0 时 step_status 必为空，恒返回 False，死代码）。
 # v4.2: _save_state_locked 已删除，所有写入通过 state_io.save_state()
 
 
