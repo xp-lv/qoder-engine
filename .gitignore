@@ -3,6 +3,9 @@ runtime/
 
 # 工作区（运行时产出，不同步）
 Z_工作区/
+z-workspace/
+outputs/
+process/
 
 # Python 缓存
 __pycache__/

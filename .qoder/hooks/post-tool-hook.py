@@ -20,11 +20,11 @@ from state_io import load_state, save_state
 # 项目根目录
 _PROJECT_ROOT = os.path.normpath(os.path.join(_HOOK_DIR, "..", ".."))
 # 默认产出物工作区
-default_workspace_base = os.path.join(_PROJECT_ROOT, "Z_工作区")
+default_workspace_base = os.path.join(_PROJECT_ROOT, "z-workspace")
 
 
 def default_workspace_path(app_path, ws_id):
-    """推导默认 workspace_path：Z_工作区/{ws_id}"""
+    """推导默认 workspace_path：z-workspace/{ws_id}"""
     return os.path.join(default_workspace_base, ws_id)
 
 
@@ -340,7 +340,7 @@ def handle_analyzer_return(tool_output, workspace_id):
                     emit(f"BLOCKING：switch.py 执行失败 — {switch_result['_error']}")
                     return
         else:
-            # 首次 init → 默认使用 Z_工作区/{ws_id}
+            # 首次 init → 默认使用 z-workspace/{ws_id}
             workspace_path = data.get("workspace_path", "") or default_workspace_path(target_app, ws_id)
             init_result = run_script(["engine/scripts/init.py",
                         "--workspace-path", workspace_path,
@@ -400,9 +400,37 @@ def _hook2_log(msg):
         pass
 
 
+def _clear_zombie_executing(sid, reason=""):
+    """清理僵尸 executing：从 STATE 的 step_status 中删除所有 executing 条目。
+
+    触发场景：role-executor 返回非 JSON、返回异常状态、或 Task 被取消。
+    正常返回（status=confirmed）时不调用此函数。
+
+    关键设计：只删 step_status，不删 completed（保护重执行场景的上一轮完成记录）。
+    """
+    try:
+        sp = resolve_ws_state(sid)
+        st = load_json_file(sp)
+        if not st:
+            return []
+        ss = st.get("step_status", {})
+        zombies = [s for s, info in ss.items()
+                   if isinstance(info, dict) and info.get("status") == "executing"]
+        if zombies:
+            for z in zombies:
+                del ss[z]
+            save_state(sp, st)
+            _hook2_log(f"ZOMBIE_CLEAR: cleared {zombies} ({reason})")
+        return zombies
+    except Exception as e:
+        _hook2_log(f"ZOMBIE_CLEAR_ERROR: {e} ({reason})")
+        return []
+
+
 def handle_role_executor_return(tool_output, workspace_id):
     """处理 role-executor 返回。
 
+    v5.0: 非正常返回时立即清理僵尸 executing（不再等待 Z1 事后检测）。
     v4.1: pbc 从 step_status 实时派生（len(step_status)），不再使用独立计数器。
     核心原则：step_status 非空时禁止向主 Agent 注入任何信号（仍有分支在执行）。
     所有分支的 submit_next 和 gate_results 缓存到 STATE.json 的 cached_branch_results，
@@ -421,10 +449,15 @@ def handle_role_executor_return(tool_output, workspace_id):
         except Exception:
             return 0
 
-    data = extract_json_from_text(tool_output, required_keys=["status"])
     sid_fallback = workspace_id or "default"
+
+    data = extract_json_from_text(tool_output, required_keys=["status"])
     if not data:
-        emit("BLOCKING：role-executor 返回格式异常，无法解析为 JSON。向用户报告此问题，不要继续推进流程。")
+        # v5.0: role-executor 返回非 JSON（Task 被取消/崩溃/超时）
+        # → 立即清理僵尸 executing，不再等待 Z1 事后检测
+        zombies = _clear_zombie_executing(sid_fallback, "role-executor 返回非 JSON")
+        zombie_msg = f"（已清理僵尸 executing: {zombies}）" if zombies else ""
+        emit(f"BLOCKING：role-executor 返回格式异常，无法解析为 JSON{zombie_msg}。向用户报告此问题，不要继续推进流程。")
         return
 
     status = data.get("status", "")
@@ -434,12 +467,16 @@ def handle_role_executor_return(tool_output, workspace_id):
     role_verdict = data.get("verdict", "")  # 从 role-executor 返回值读 verdict
     step = data.get("step", "")
 
-    # ── 状态检查（非 confirmed 状态直接报告，不缓存）──
+    # ── 状态检查（非 confirmed 状态直接报告 + 清理僵尸）──
     if status == "BLOCKING":
-        emit(f"BLOCKING：role-executor 返回 BLOCKING。向用户报告以下信息：\n{json.dumps(data, ensure_ascii=False)[:500]}")
+        zombies = _clear_zombie_executing(sid, "role-executor 返回 BLOCKING")
+        zombie_msg = f"（已清理僵尸 executing: {zombies}）" if zombies else ""
+        emit(f"BLOCKING：role-executor 返回 BLOCKING{zombie_msg}。向用户报告以下信息：\n{json.dumps(data, ensure_ascii=False)[:500]}")
         return
     if status != "confirmed":
-        emit(f"BLOCKING：role-executor 返回异常状态 '{status}'，向用户报告此问题。")
+        zombies = _clear_zombie_executing(sid, f"role-executor 异常状态 '{status}'")
+        zombie_msg = f"（已清理僵尸 executing: {zombies}）" if zombies else ""
+        emit(f"BLOCKING：role-executor 返回异常状态 '{status}'{zombie_msg}，向用户报告此问题。")
         return
 
     # ── 调 step.py --submit ──
@@ -456,10 +493,12 @@ def handle_role_executor_return(tool_output, workspace_id):
     submit_next = submit_result.get("next", "")
     _hook2_log(f"SUBMIT_RESULT: next={submit_next} action={submit_result.get('action','')} gate_results={json.dumps(submit_result.get('gate_results',[]), ensure_ascii=False)[:200]}")
 
-    # submit 失败时直接报错（pbc 从 step_status 派生，无需手动递减）
+    # submit 失败时清理僵尸并报错
     if submit_result.get("action") == "error" or submit_result.get("status") == "error":
         _err = submit_result.get("error", "submit 失败")
-        emit(f"BLOCKING：引擎错误 — {_err}")
+        zombies = _clear_zombie_executing(sid, f"submit 失败: {_err}")
+        zombie_msg = f"（已清理僵尸 executing: {zombies}）" if zombies else ""
+        emit(f"BLOCKING：引擎错误 — {_err}{zombie_msg}")
         return
 
     # ── pbc 门控（从 step_status 派生）──
@@ -615,6 +654,72 @@ def main():
     except Exception:
         pass
 
+    # ── v5.0: 检测主 Agent 违规调用引擎脚本 ──
+    # Bash 调用中如果包含引擎脚本路径，说明主 Agent 越权了
+    # Hook② 立即跑 health_check --fix 修复 STATE，并注入禁止指令
+    if tool_name == "Bash":
+        bash_cmd = tool_input.get("command", "") or ""
+        _ENGINE_SCRIPT_PATTERNS = [
+            "engine/scripts/step.py",
+            "engine/scripts/init.py",
+            "engine/scripts/fix.py",
+            "engine/scripts/set_state.py",
+            "engine/scripts/gate.py",
+            "engine/scripts/switch.py",
+            "engine/scripts/orchestrator.py",
+            "engine/scripts/router.py",
+        ]
+        # 检测是否调用了引擎脚本（排除 --list-workspaces 这种只读调用）
+        _READONLY_PATTERNS = ["--list-workspaces"]
+        is_readonly = any(p in bash_cmd for p in _READONLY_PATTERNS)
+        is_engine_call = any(p in bash_cmd for p in _ENGINE_SCRIPT_PATTERNS)
+
+        if is_engine_call and not is_readonly:
+            _hook2_log(f"VIOLATION: 主 Agent 违规调用引擎脚本: {bash_cmd[:200]}")
+
+            # 从命令中提取 workspace_id
+            viol_sid = "default"
+            if "--workspace-id" in bash_cmd:
+                try:
+                    viol_sid = bash_cmd.split("--workspace-id")[1].split()[0].strip()
+                except Exception:
+                    pass
+
+            # 立即跑 health_check --fix 修复可能的非法 STATE
+            try:
+                viol_state_path = resolve_ws_state(viol_sid)
+                if os.path.exists(viol_state_path):
+                    hc_result = run_script([
+                        "engine/scripts/state_health_check.py",
+                        "--workspace-id", viol_sid, "--fix",
+                    ])
+                    fixes = hc_result.get("fix_actions", []) if hc_result else []
+                    summary = hc_result.get("summary", {}) if hc_result else {}
+                    if fixes:
+                        _hook2_log(f"VIOLATION_FIX: 修复了 {len(fixes)} 条: {fixes}")
+                else:
+                    fixes = []
+                    summary = {}
+            except Exception as e:
+                fixes = []
+                summary = {}
+                _hook2_log(f"VIOLATION_FIX_ERROR: {e}")
+
+            # 注入禁止指令
+            fix_msg = ""
+            if fixes:
+                fix_msg = f"Hook② 已自动修复 {len(fixes)} 项状态异常。"
+            emit(
+                f"【主Agent指令】检测到违规行为：你刚才通过 Bash 调用了引擎脚本，这会破坏引擎状态机。{fix_msg}\n"
+                f"禁止事项：不要通过 Bash 调用 engine/scripts/ 下的任何脚本（step.py、init.py、fix.py、set_state.py、gate.py 等）。\n"
+                f"你的唯一合法动作：\n"
+                f"1. 调用 Task(stability-analyzer) 处理用户消息\n"
+                f"2. 调用 Task(role-executor) 执行角色任务\n"
+                f"3. 在 Hook② 注入指令后被动执行极少数核心 Bash（仅限指令明确要求的 step.py --next/--decide）\n"
+                f"如需推进流程，请等待 Hook② 注入指令，不要自行调用脚本。"
+            )
+            return
+
     # 只处理 Task/Agent
     if tool_name not in ("Task", "Agent"):
         sys.exit(0)
@@ -649,7 +754,7 @@ def main():
         elif agent_type == "role-executor":
             handle_role_executor_return(tool_output, workspace_id)
     except Exception as e:
-        # Hook② 内部错误 → 写日志 + emit 报错（不静默退出）
+        # Hook② 内部错误 → 清理僵尸 + 写日志 + emit 报错（不静默退出）
         import traceback
         debug_path = os.path.join(os.path.dirname(__file__), "_hook_error.log")
         try:
@@ -657,6 +762,12 @@ def main():
                 f.write(f"\n[{__import__('datetime').datetime.now()}] {traceback.format_exc()}\n")
         except:
             pass
+        # v5.0: Hook② 内部异常时也清理僵尸 executing
+        if workspace_id:
+            try:
+                _clear_zombie_executing(workspace_id, f"Hook② 内部异常: {e}")
+            except Exception:
+                pass
         emit(f"BLOCKING：Hook② 内部异常 — {e}\n{traceback.format_exc()[:500]}")
 
     sys.exit(0)
