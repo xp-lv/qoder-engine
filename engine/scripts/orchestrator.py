@@ -13,7 +13,7 @@ import argparse, json, os, sys, subprocess, uuid
 from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from session_path import resolve_ws_state, resolve_app_path, resolve_workspace_output, get_edge_targets, is_edge_backward
-from state_io import load_state, save_state, modify_state_locked
+from state_io import load_state, save_state, state_txn
 
 def now_iso():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -52,24 +52,19 @@ def cache_dispatches(state_path, dispatches):
 
     v4.0.1 修复：追加而非覆盖。多个并行分支的 post_execute 可能先后缓存
     dispatches，覆盖写会导致先缓存的独立目标 dispatch 被后缓存的覆盖丢失。
-    v5.1: 使用 modify_state_locked 保证 RMW 原子性。
+    v5.2: 使用 state_txn 原子事务。
     """
-    def _merge(st):
+    with state_txn(state_path) as st:
         existing = st.get("pending_dispatches") or []
         st["pending_dispatches"] = existing + dispatches
-        return st
-    modify_state_locked(state_path, _merge)
 
 # ─── 状态转换统一 API ───
 
 def mark_complete(state_path):
     """所有 complete 路径的唯一入口：写 terminal_state。"""
-    def _set_complete(st):
+    with state_txn(state_path) as st:
         if not st.get("terminal_state"):
             st["terminal_state"] = "completed"
-            return st
-        return None
-    modify_state_locked(state_path, _set_complete)
 
 def load_router_and_registry(app_path):
     """加载 ROUTER.json 和 registry.json，返回 (router_steps, registry, reg_map, step_role_map)."""
@@ -98,10 +93,12 @@ def _get_pending_routes(st):
     """获取 pending_routes（瞬态路由信号，路由后清空）。"""
     return st.get("pending_routes", {})
 
-def _clear_pending_routes(state_path, st):
-    """清空 pending_routes（路由完成后调用）。"""
-    st["pending_routes"] = {}
-    save_state(state_path, st)
+def _clear_pending_routes(state_path):
+    """清空 pending_routes（路由完成后调用）。
+    v5.2: 使用 state_txn 读取最新 state 后清除，避免陈旧引用覆写子进程的并发更新。
+    """
+    with state_txn(state_path) as st:
+        st["pending_routes"] = {}
 
 def _process_dispatch_pipeline(dispatches, st, app_path):
     """统一管道：converge → dedup → cross-state filter。
@@ -139,11 +136,13 @@ def phase_dispatch(state_path, app_path, workspace_id, from_steps, on_result, ta
     # 1. 优先读取 pending_dispatches 缓存（零参数调度核心）
     pending = st.get("pending_dispatches")
     if pending:
-        st["pending_dispatches"] = None
-        save_state(state_path, st)
+        # v5.2: 用 state_txn 原子清除 pending_dispatches，避免陈旧 st 覆写子进程更新
+        with state_txn(state_path) as fresh_st:
+            fresh_st["pending_dispatches"] = None
         dispatches = pending
         # 消费 pending_routes（瞬态信号，用完即清空）
-        _clear_pending_routes(state_path, st)
+        _clear_pending_routes(state_path)
+        st = load_state(state_path)  # 重新读取以获取最新状态
         _process_dispatches(state_path, app_path, workspace_id, dispatches, from_steps or [], task_request, st)
         return
 
@@ -178,7 +177,7 @@ def phase_dispatch(state_path, app_path, workspace_id, from_steps, on_result, ta
 
         if not all_dispatches:
             # 清空 pending_routes（已路由完毕，无 dispatch 产出）
-            _clear_pending_routes(state_path, st)
+            _clear_pending_routes(state_path)
             if all_complete:
                 mark_complete(state_path)
                 output({"status": "success", "next": "complete", "reason": "all_complete"})
@@ -186,8 +185,10 @@ def phase_dispatch(state_path, app_path, workspace_id, from_steps, on_result, ta
                 output({"status": "success", "next": "wait", "reason": "no_dispatchable_steps"})
 
         # 清空 pending_routes（瞬态信号已消费完毕）
-        _clear_pending_routes(state_path, st)
+        _clear_pending_routes(state_path)
 
+        # v5.2: router.py 子进程可能已更新 edge_counts，重新读取最新 state
+        st = load_state(state_path)
         _process_dispatches(state_path, app_path, workspace_id, all_dispatches, [], task_request, st)
         return
 
@@ -207,6 +208,8 @@ def phase_dispatch(state_path, app_path, workspace_id, from_steps, on_result, ta
     message = router_result.get("message", "")
 
     # ── 全局汇集 + 去重（统一管道）──
+    # v5.2: router.py 子进程可能已更新 edge_counts，重新读取最新 state
+    st = load_state(state_path)
     if dispatches and from_steps:
         dispatches = _process_dispatch_pipeline(dispatches, st, app_path)
 
@@ -468,15 +471,13 @@ def phase_post_execute(state_path, app_path, workspace_id, results_json):
 
     # v4.2: 清理 failed 步骤的 step_status（inline 精准清理，禁止用 rollback 核弹 pending_dispatches）
     # 僵尸 executing 的深度清理由 state_health_check.py Z1 统一接管
-    # v5.1: 使用 modify_state_locked 保证 RMW 原子性
+    # v5.2: 使用 state_txn 原子事务
     for f in failed:
         _fstep = f["step"]
-        def _cleanup_failed(st, _s=_fstep):
+        with state_txn(state_path) as st:
             ss = st.get("step_status", {})
-            if _s in ss:
-                del ss[_s]
-            return st
-        modify_state_locked(state_path, _cleanup_failed)
+            if _fstep in ss:
+                del ss[_fstep]
 
     # error 最高优先级：只要有 failed 就报 error
     if failed:

@@ -15,7 +15,7 @@ _ENGINE_SCRIPTS = os.path.normpath(os.path.join(_HOOK_DIR, "..", "..", "engine",
 sys.path.insert(0, _ENGINE_SCRIPTS)
 
 from session_path import resolve_ws_state, resolve_app_path, resolve_ws_base, read_workspace_root
-from state_io import load_state, save_state
+from state_io import load_state, save_state, state_txn
 
 # 项目根目录
 _PROJECT_ROOT = os.path.normpath(os.path.join(_HOOK_DIR, "..", ".."))
@@ -407,21 +407,20 @@ def _clear_zombie_executing(sid, reason=""):
     正常返回（status=confirmed）时不调用此函数。
 
     关键设计：只删 step_status，不删 completed（保护重执行场景的上一轮完成记录）。
+    v5.2: 使用 state_txn 原子事务，消除 RMW 竞态。
     """
     try:
         sp = resolve_ws_state(sid)
-        st = load_json_file(sp)
-        if not st:
-            return []
-        ss = st.get("step_status", {})
-        zombies = [s for s, info in ss.items()
-                   if isinstance(info, dict) and info.get("status") == "executing"]
-        if zombies:
-            for z in zombies:
+        cleared = []
+        with state_txn(sp) as st:
+            ss = st.get("step_status", {})
+            cleared = [s for s, info in ss.items()
+                       if isinstance(info, dict) and info.get("status") == "executing"]
+            for z in cleared:
                 del ss[z]
-            save_state(sp, st)
-            _hook2_log(f"ZOMBIE_CLEAR: cleared {zombies} ({reason})")
-        return zombies
+        if cleared:
+            _hook2_log(f"ZOMBIE_CLEAR: cleared {cleared} ({reason})")
+        return cleared
     except Exception as e:
         _hook2_log(f"ZOMBIE_CLEAR_ERROR: {e} ({reason})")
         return []
@@ -503,42 +502,40 @@ def handle_role_executor_return(tool_output, workspace_id):
 
     # ── pbc 门控（从 step_status 派生）──
     state_path = resolve_ws_state(sid)
-    state = load_json_file(state_path) or {}
     pbc = _derive_pbc(sid)  # v4.1: 从 step_status 派生
-    _hook2_log(f"PBC_DERIVED: pbc={pbc} pending_dispatches={state.get('pending_dispatches')} step_status_keys={list(state.get('step_status',{}).keys())}")
+    _hook2_log(f"PBC_DERIVED: pbc={pbc}")
 
     if pbc > 0:
         # ══════════════════════════════════════════════════════
         # pbc > 0：仍有并行分支在执行（step_status 非空）
         # ══════════════════════════════════════════════════════
         # 缓存当前分支结果，纯静默，等其他分支返回
-        cached = state.setdefault("cached_branch_results", [])
-        cached.append({
-            "branch_id": branch_id,
-            "step": step,
-            "submit_next": submit_next,
-            "gate_results": submit_result.get("gate_results", []),
-            "pending": submit_result.get("pending", []),
-            "failed": submit_result.get("failed", []),
-            "reason": submit_result.get("reason", ""),
-        })
-        save_state(state_path, state)
+        # v5.2: state_txn 保证缓存追加的原子性
+        with state_txn(state_path) as st:
+            st.setdefault("cached_branch_results", []).append({
+                "branch_id": branch_id,
+                "step": step,
+                "submit_next": submit_next,
+                "gate_results": submit_result.get("gate_results", []),
+                "pending": submit_result.get("pending", []),
+                "failed": submit_result.get("failed", []),
+                "reason": submit_result.get("reason", ""),
+            })
         sys.exit(0)
 
     # pbc == 0：最后一个分支返回（step_status 已空），统一决策
+    # v5.2: state_txn 保证「读缓存 + 清空」的原子性
     all_results = [submit_result]
-    for c in state.get("cached_branch_results", []):
-        all_results.append({
-            "next": c.get("submit_next", ""),
-            "gate_results": c.get("gate_results", []),
-            "pending": c.get("pending", []),
-            "failed": c.get("failed", []),
-            "reason": c.get("reason", ""),
-        })
-
-    # 清空缓存
-    state["cached_branch_results"] = []
-    save_state(state_path, state)
+    with state_txn(state_path) as st:
+        for c in st.get("cached_branch_results", []):
+            all_results.append({
+                "next": c.get("submit_next", ""),
+                "gate_results": c.get("gate_results", []),
+                "pending": c.get("pending", []),
+                "failed": c.get("failed", []),
+                "reason": c.get("reason", ""),
+            })
+        st["cached_branch_results"] = []
 
     # ══════════════════════════════════════════════════════
     # pbc == 0：统一决策（v4.3 优先级修订）

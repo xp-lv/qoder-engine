@@ -1,23 +1,27 @@
 #!/usr/bin/env python3
-"""state_io.py — STATE.json 唯一读写入口（v5.0: 三层防御 Layer 2）。
+"""state_io.py — STATE.json 唯一读写入口（v5.2: state_txn 原子事务）。
 
 所有对 STATE.json 的读写操作必须通过本模块完成。
 禁止任何脚本自行实现 json.dump/os.replace/filelock 逻辑。
 
-v5.0 新增：写入后自动执行 check_basic 不变量校验。
-  - 不拒绝写入（避免阻塞 orchestrator 多步操作）
-  - auto_fixable 的违反立即修正并重写
-  - 非 auto_fixable 的违反记录日志
-  - 可通过 validate=False 绕过（仅 init.py 创建初始空 STATE 时使用）
+v5.2 新增：state_txn 上下文管理器 — STATE.json 写入的唯一规范机制。
+  with state_txn(path) as st:          # 获取锁 + 读取
+      st["key"] = value                # 修改
+  # 退出时自动：写入 + 校验 + 释放锁
 
-Usage:
-  from state_io import load_state, save_state
+  机制保证：
+  1. 锁的生命周期绑定到 with 块，无法遗漏释放
+  2. 读和写在同一锁内，RMW 竞态在语法层面不可能发生
+  3. with 块内异常 = 自动回滚（不写入，磁盘状态不变）
+  4. 禁止在 with 块内调用引擎脚本（会死锁）
 
-  state = load_state(state_path)       # 读
-  state["step_status"][step] = {...}   # 改
-  save_state(state_path, state)        # 写（原子 + 文件锁 + 写入后校验）
+  历史 API 兼容：
+  - load_state: 只读，不加锁
+  - save_state: 仅写入（已加锁），向后兼容
+  - modify_state_locked: 回调式 RMW（state_txn 的函数版）
 """
 import json, os, tempfile, sys
+from contextlib import contextmanager
 from filelock import acquire_lock, release_lock
 
 # v5.0: 不变量校验日志路径（与 state_health_check 共用引擎脚本目录）
@@ -205,19 +209,27 @@ def save_state(state_path, state, validate=True):
             release_lock(lock_file)
 
 
-def modify_state_locked(state_path, modifier_fn, timeout=60):
-    """原子性 Read-Modify-Write：在单一文件锁内完成读、改、写、校验。
+@contextmanager
+def state_txn(state_path, timeout=60):
+    """★ STATE.json 原子事务 ★ (v5.2: RMW 竞态的机制级根治)
 
-    解决并行场景下 load_state → 内存修改 → save_state 之间的竞态问题。
-    所有需要修改 STATE.json 的场景应优先使用此函数替代分离的 load/save 模式。
+    在单一文件锁内完成 读取 → 修改 → 写入 → 校验。
+    锁的生命周期绑定到 with 块，异常自动回滚（不写入）。
+
+    用法：
+        with state_txn(path) as st:       # 获取锁 + 读取最新 state
+            st["key"] = value             # 直接修改 st
+        # 正常退出 → 写入 + 校验
+        # 异常退出 → 不写入（磁盘状态不变），释放锁
+
+    约束：with 块内禁止调用引擎脚本（subprocess 会死锁等待同一把锁）。
 
     Args:
         state_path: STATE.json 路径
-        modifier_fn: 接收当前 state dict，返回修改后的 state dict（返回 None 表示不修改）
         timeout: 获取锁超时秒数
 
-    Returns:
-        修改后的 state dict
+    Yields:
+        state dict（可安全修改）
     """
     d = os.path.dirname(state_path)
     if d:
@@ -230,12 +242,35 @@ def modify_state_locked(state_path, modifier_fn, timeout=60):
             st = load_state(state_path)
             if st is None:
                 st = {}
-            modified = modifier_fn(st)
-            if modified is not None:
-                st = modified
+            yield st
+            # 正常退出 with 块 → 原子写入 + 校验
             _write_unlocked(state_path, st)
             if _INV_LOG_ENABLED:
                 _post_write_check_inplace(state_path, st)
-            return st
         finally:
+            # 异常路径：跳过 _write_unlocked，磁盘状态保持不变
             release_lock(lock_file)
+
+
+def modify_state_locked(state_path, modifier_fn, timeout=60):
+    """回调式原子 RMW（state_txn 的函数变体，用于不便用 with 的场景）。
+
+    等价于：
+        with state_txn(state_path, timeout) as st:
+            modifier_fn(st)
+
+    Args:
+        state_path: STATE.json 路径
+        modifier_fn: 接收当前 state dict，直接原地修改（无需返回值）
+        timeout: 获取锁超时秒数
+
+    Returns:
+        修改后的 state dict
+    """
+    with state_txn(state_path, timeout) as st:
+        modified = modifier_fn(st)
+        if modified is not None and modified is not st:
+            # 兼容旧约定：modifier_fn 返回新 dict（非原地修改）时替换
+            st.clear()
+            st.update(modified)
+        return st
