@@ -181,7 +181,10 @@ def phase_dispatch(state_path, app_path, workspace_id, from_steps, on_result, ta
                 mark_complete(state_path)
                 output({"status": "success", "next": "complete", "reason": "all_complete"})
             else:
-                output({"status": "success", "next": "wait", "reason": "no_dispatchable_steps"})
+                diag_st = load_state(state_path)
+                reason, is_error = _diagnose_wait_reason(diag_st, app_path)
+                next_val = "error" if is_error else "wait"
+                output({"status": "success", "next": next_val, "reason": reason})
 
         # 清空 pending_routes（瞬态信号已消费完毕）
         _clear_pending_routes(state_path)
@@ -215,7 +218,10 @@ def phase_dispatch(state_path, app_path, workspace_id, from_steps, on_result, ta
             mark_complete(state_path)
             output({"status": "success", "next": "complete", "reason": "all_complete"})
         else:
-            output({"status": "success", "next": "wait", "reason": message or "no_dispatchable_steps"})
+            diag_st = load_state(state_path)
+            reason, is_error = _diagnose_wait_reason(diag_st, app_path)
+            next_val = "error" if is_error else "wait"
+            output({"status": "success", "next": next_val, "reason": reason})
 
     _process_dispatches(state_path, app_path, workspace_id, dispatches, from_steps or [], task_request)
 
@@ -248,6 +254,98 @@ def _global_converge(dispatches, st, app_path):
             filtered.append(d)
     
     return filtered
+
+
+def _find_last_good_step(st):
+    """v7.1: 从 completed 中找到最后一个 confirmed verdict 的步骤名。
+
+    用于在引擎报错时给用户建议 jump 目标。
+    """
+    completed = st.get("completed", {})
+    if not completed:
+        return None
+    # 按 created_at 时间戳排序，取最后一个 verdict=confirmed 的
+    confirmed_steps = [
+        (step, info.get("created_at", ""))
+        for step, info in completed.items()
+        if info.get("verdict") == "confirmed"
+    ]
+    if not confirmed_steps:
+        # 没有 confirmed verdict 的，取最后一个
+        all_steps = [(step, info.get("created_at", "")) for step, info in completed.items()]
+        if not all_steps:
+            return None
+        return sorted(all_steps, key=lambda x: x[1])[-1][0]
+    return sorted(confirmed_steps, key=lambda x: x[1])[-1][0]
+
+
+def _diagnose_wait_reason(st, app_path):
+    """v7.1: 当引擎无 dispatch 产出时，诊断具体原因。
+
+    引擎是 STATE 合法性的唯一裁判。此函数将模糊的 no_dispatchable_steps
+    转化为用户可理解的明确原因，替代外部 health_check 预测层。
+
+    返回 (reason_str, is_error)。
+    is_error=False 表示正常等待（JOIN 未满足），is_error=True 表示 STATE 可能不一致。
+    """
+    completed = set(st.get("completed", {}).keys())
+    pending_routes = st.get("pending_routes", {})
+    pending_dispatches = st.get("pending_dispatches")
+    step_status = st.get("step_status", {})
+
+    # 加载 ROUTER + registry
+    router_path = os.path.join(app_path, "ROUTER.json")
+    reg_path = os.path.join(app_path, "registry.json")
+    router_steps = []
+    registry = []
+    if os.path.exists(router_path):
+        with open(router_path, "r", encoding="utf-8") as f:
+            router_steps = json.load(f).get("steps", [])
+    if os.path.exists(reg_path):
+        with open(reg_path, "r", encoding="utf-8") as f:
+            registry = json.load(f)
+
+    role_input_groups = {r["role_name"]: r.get("input_groups", []) for r in (registry or [])}
+
+    # Case 1: pending_dispatches 存在 → 下一轮 --next 会消费
+    if pending_dispatches:
+        steps = [d.get("step", "?") for d in pending_dispatches]
+        return (f"pending_dispatches 待消费: {steps}", False)
+
+    # Case 2: step_status 非空 → 有分支正在执行
+    if step_status:
+        steps = list(step_status.keys())
+        return (f"分支执行中: {steps}", False)
+
+    # Case 3: 扫描 JOIN 等待 — 存在步骤其部分前驱已完成但未全部满足
+    join_waiters = []
+    for step_data in router_steps:
+        step_name = step_data.get("step", "")
+        if step_name in completed:
+            continue
+        role = step_data.get("role", "")
+        groups = role_input_groups.get(role, [])
+        for group in groups:
+            missing = [s for s in group if s not in completed]
+            done = [s for s in group if s in completed]
+            if missing and done:
+                join_waiters.append(f"{step_name} 等待前驱完成: 缺 {missing} (已有 {done})")
+
+    if join_waiters:
+        return ("JOIN 等待: " + "; ".join(join_waiters), False)
+
+    # Case 4: pending_routes 存在但路由无产出 → verdict 无匹配 transition
+    if pending_routes:
+        route_steps = list(pending_routes.keys())
+        # 找到最后一个成功的步骤作为建议 jump 目标
+        last_good = _find_last_good_step(st)
+        suggest = f"建议 jump 到 '{last_good}'" if last_good else ""
+        return (f"路由信号存在 ({route_steps}) 但无 dispatch 产出。{suggest}", True)
+
+    # Case 5: 无任何信号且未终态 → STATE 可能不一致
+    last_good = _find_last_good_step(st)
+    suggest = f"建议 jump 到 '{last_good}'" if last_good else ""
+    return (f"无路由信号（pending_routes 为空），但工作流未完成。已完成 {len(completed)} 步。{suggest}。", True)
 
 def _process_dispatches(state_path, app_path, workspace_id, dispatches, from_steps, task_request):
     """v4.0: 统一处理 dispatch 列表。
@@ -522,8 +620,9 @@ def phase_post_execute(state_path, app_path, workspace_id, results_json):
                 output({"status": "success", "next": "complete",
                         "reason": f"terminal_state={st['terminal_state']}",
                         "auto_confirmed": auto_confirmed, "gate_results": gate_results, "failed": failed})
-            output({"status": "success", "next": "wait",
-                    "reason": "no_dispatchable_steps",
+            reason, is_error = _diagnose_wait_reason(st, app_path)
+            next_val = "error" if is_error else "wait"
+            output({"status": "success", "next": next_val, "reason": reason,
                     "auto_confirmed": auto_confirmed, "gate_results": gate_results, "failed": failed})
 
     # 有 pending → BLOCKING
@@ -602,7 +701,10 @@ def phase_post_confirm(state_path, app_path, workspace_id, decisions_json):
         mark_complete(state_path)
         output({"status": "success", "next": "complete"})
     else:
-        output({"status": "success", "next": "wait", "reason": "no_dispatchable_steps"})
+        diag_st = load_state(state_path)
+        reason, is_error = _diagnose_wait_reason(diag_st, app_path)
+        next_val = "error" if is_error else "wait"
+        output({"status": "success", "next": next_val, "reason": reason})
 
 # ─── main ───
 

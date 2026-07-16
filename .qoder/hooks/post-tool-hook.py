@@ -205,27 +205,9 @@ def handle_analyzer_return(tool_output, workspace_id):
     action = data.get("action", "")
     sid = data.get("workspace_id", workspace_id or "default")
 
-    # ── 全局 STATE 健康检测（在所有 intent 分支前执行）──
-    # 原理：主 Agent 可能违规调用 --next/step.py，或 Task 被取消后留下僵尸状态。
-    # 每次进入 analyzer 路径时，基于 ROUTER.json DAG 拓扑做全局一致性校验+修复。
-    # 这不替代扰动分析器的意图分类，而是确保引擎状态在处理用户意图前是合法的。
-    _inv_state_path = resolve_ws_state(sid)
-    if os.path.exists(_inv_state_path):
-        _hc_result = run_script([
-            "engine/scripts/state_health_check.py",
-            "--workspace-id", sid,
-            "--fix"
-        ])
-        if _hc_result and not _hc_result.get("_error"):
-            _summary = _hc_result.get("summary", {})
-            _fixes = _hc_result.get("fix_actions", [])
-            if _summary.get("critical", 0) > 0 or _summary.get("major", 0) > 0:
-                _hook2_log(f"HEALTH_CHECK: status={_hc_result.get('status')} fixes={_fixes}")
-            elif _fixes:
-                _hook2_log(f"HEALTH_CHECK: minor fixes applied: {_fixes}")
-        else:
-            _err = _hc_result.get("_error", "unknown") if _hc_result else "no result"
-            _hook2_log(f"HEALTH_CHECK: failed - {_err}")
+    # v7.1: 全局 STATE health_check 已移除。
+    # 引擎自身的错误输出（_diagnose_wait_reason）已足够清晰，
+    # 无需外部预测性检测层。
 
     # ── 1. chitchat ──
     if intent == "chitchat":
@@ -252,7 +234,7 @@ def handle_analyzer_return(tool_output, workspace_id):
                 emit(f"BLOCKING：初始化失败 — {init_result.get('error_code', '?')}: {init_result.get('message', '?')}")
                 return
 
-        # v4.2: rework 已由 state_health_check.py Z1 取代，不再走 fix.py
+        # v7.1: rework/reset/jump 统一由 fix.py 处理
         if action in ("reset", "jump"):
             target_step = data.get("target_step", "")
             fix_args = ["engine/scripts/fix.py", "--type", action,
@@ -680,9 +662,7 @@ def main():
     except Exception:
         pass
 
-    # ── v5.0: 检测主 Agent 违规调用引擎脚本 ──
-    # Bash 调用中如果包含引擎脚本路径，说明主 Agent 越权了
-    # Hook② 立即跑 health_check --fix 修复 STATE，并注入禁止指令
+    # v7.1: 检测主 Agent 违规调用引擎脚本（仅拦截+报告，不修复 STATE）
     if tool_name == "Bash":
         bash_cmd = tool_input.get("command", "") or ""
         _ENGINE_SCRIPT_PATTERNS = [
@@ -711,32 +691,11 @@ def main():
                 except Exception:
                     pass
 
-            # 立即跑 health_check --fix 修复可能的非法 STATE
-            try:
-                viol_state_path = resolve_ws_state(viol_sid)
-                if os.path.exists(viol_state_path):
-                    hc_result = run_script([
-                        "engine/scripts/state_health_check.py",
-                        "--workspace-id", viol_sid, "--fix",
-                    ])
-                    fixes = hc_result.get("fix_actions", []) if hc_result else []
-                    summary = hc_result.get("summary", {}) if hc_result else {}
-                    if fixes:
-                        _hook2_log(f"VIOLATION_FIX: 修复了 {len(fixes)} 条: {fixes}")
-                else:
-                    fixes = []
-                    summary = {}
-            except Exception as e:
-                fixes = []
-                summary = {}
-                _hook2_log(f"VIOLATION_FIX_ERROR: {e}")
+            # v7.1: health_check 调用已移除。引擎自身的错误输出已足够清晰。
 
             # 注入禁止指令
-            fix_msg = ""
-            if fixes:
-                fix_msg = f"Hook② 已自动修复 {len(fixes)} 项状态异常。"
             emit(
-                f"【主Agent指令】检测到违规行为：你刚才通过 Bash 调用了引擎脚本，这会破坏引擎状态机。{fix_msg}\n"
+                f"【主Agent指令】检测到违规行为：你刚才通过 Bash 调用了引擎脚本，这会破坏引擎状态机。\n"
                 f"禁止事项：不要通过 Bash 调用 engine/scripts/ 下的任何脚本（step.py、init.py、fix.py、set_state.py、gate.py 等）。\n"
                 f"你的唯一合法动作：\n"
                 f"1. 调用 Task(stability-analyzer) 处理用户消息\n"

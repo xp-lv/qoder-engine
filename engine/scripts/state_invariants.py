@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
-"""state_invariants.py — STATE 合法性不变量规范（v6.0: 并行原生设计）。
+"""state_invariants.py — STATE 合法性不变量规范（v7.0: 移除写入后自动修复）。
 
-v6.0 重新设计：基于引擎实际执行模型（并行 DAG + pbc 门控 + input_groups OR 语义），
-而非旧的串行假设（"step_status 有 executing = 僵尸"）。
+v7.0 变更：
+  - 移除 Layer A (check_basic)：写入后即时校验引入不确定性，已全部删除。
+  - save_state/state_txn 不再调用 check_basic。
+  - 保留 Layer B/C/D：由 state_health_check.py 独立调用（仅检测报告，不自动修复）。
 
-四层分组：
-  Layer A (check_basic):      零外部依赖，state_io 内部调用
+四层分组（v7.0 后）：
+  Layer A:    已移除（原 check_basic 由 state_io 内部调用）
   Layer B (check_structural): 需 ROUTER steps
   Layer C (check_causal):     需 ROUTER + registry
   Layer D (check_parallel):   需 ROUTER + registry（并行专属检查）
-
-设计原则：
-  1. 每条不变量只依赖 STATE + ROUTER + registry 的静态结构，不依赖运行时上下文
-  2. 并行和串行统一：step_status 可有 N 个 step 是合法常态
-  3. auto_fixable 只标注不破坏 JOIN 收敛的安全修复
 
 CLI:
   python3 state_invariants.py --state-path <path> [--router-path <path>] [--registry-path <path>]
@@ -61,134 +58,9 @@ _VALID_STATUS = {"executing", "awaiting_confirmation"}
 # Layer A: 基础结构不变量（零外部依赖）
 # ═══════════════════════════════════════════════════════════════
 
-def check_basic(state: dict) -> List[Violation]:
-    """基础结构检查，在 state_io.save_state() 内部调用。
-
-    覆盖: A1 (status 枚举), A2 (终态完备性), A3 (pending_routes ⊆ completed)
-
-    A4 (缓存生命周期) 已移除：cached_branch_results 是 Hook② 的私有缓存，
-    其生命周期由 Hook② pbc 门控统一管理（写入: pbc>0 静默缓存；清除: pbc=0 消费后清空）。
-    invariant 层不应跨职责边界干预另一组件的瞬态缓存，否则会在 advance 清除
-    step_status 后、Hook② 消费 cached_branch_results 前的合法窗口内误杀有效数据。
-    """
-    violations = []
-    _a1_status_enum(state, violations)
-    _a2_terminal_completeness(state, violations)
-    _a3_pending_routes_subset(state, violations)
-    return violations
-
-
-def _a1_status_enum(state, violations):
-    """A1: step_status 中的 status 只能是 executing / awaiting_confirmation。"""
-    ss = state.get("step_status", {})
-    for step, info in ss.items():
-        if isinstance(info, dict):
-            status = info.get("status", "")
-            if status not in _VALID_STATUS:
-                violations.append(Violation(
-                    inv_id="A1",
-                    severity="critical",
-                    step=step,
-                    message=f"step_status['{step}'].status='{status}' 不在合法枚举中 {_VALID_STATUS}",
-                    fix_type="invalid_status",
-                    fix_data={"step": step, "status": status},
-                    auto_fixable=False,
-                ))
-
-
-def _a2_terminal_completeness(state, violations):
-    """A2: terminal_state 非空时，所有活跃字段必须为空。
-
-    并行场景：terminal_state 意味着整个工作流结束（所有并行分支已收敛）。
-    """
-    ts = state.get("terminal_state")
-    if ts is None:
-        return
-
-    ss = state.get("step_status", {})
-    pd = state.get("pending_dispatches")
-    pr = state.get("pending_routes", {})
-    cbr = state.get("cached_branch_results", [])
-
-    if ss:
-        steps = list(ss.keys())
-        violations.append(Violation(
-            inv_id="A2",
-            severity="critical",
-            step=steps[0] if steps else "",
-            message=f"terminal_state='{ts}' 但 step_status 非空: {steps}",
-            fix_type="clear_step_status_on_terminal",
-            fix_data={"steps": steps},
-            auto_fixable=True,
-        ))
-
-    if pd:
-        violations.append(Violation(
-            inv_id="A2",
-            severity="critical",
-            step="",
-            message=f"terminal_state='{ts}' 但 pending_dispatches 非空 ({len(pd)} 条)",
-            fix_type="clear_dispatches_on_terminal",
-            fix_data={},
-            auto_fixable=True,
-        ))
-
-    if pr:
-        steps = list(pr.keys())
-        violations.append(Violation(
-            inv_id="A2",
-            severity="major",
-            step=steps[0] if steps else "",
-            message=f"terminal_state='{ts}' 但 pending_routes 非空: {steps}",
-            fix_type="clear_pending_routes_on_terminal",
-            fix_data={"steps": steps},
-            auto_fixable=True,
-        ))
-
-    if cbr:
-        violations.append(Violation(
-            inv_id="A2",
-            severity="major",
-            step="",
-            message=f"terminal_state='{ts}' 但 cached_branch_results 有 {len(cbr)} 条残留",
-            fix_type="clear_cached_branch_results",
-            fix_data={},
-            auto_fixable=True,
-        ))
-
-    ad = state.get("active_dispatches", {})
-    if ad:
-        violations.append(Violation(
-            inv_id="A2",
-            severity="major",
-            step="",
-            message=f"terminal_state='{ts}' 但 active_dispatches 有 {len(ad)} 条残留",
-            fix_type="clear_active_dispatches_on_terminal",
-            fix_data={},
-            auto_fixable=True,
-        ))
-
-
-def _a3_pending_routes_subset(state, violations):
-    """A3: pending_routes 中的 step 必须也在 completed 中。"""
-    pr = state.get("pending_routes", {})
-    cp = state.get("completed", {})
-    for step in pr:
-        if step not in cp:
-            violations.append(Violation(
-                inv_id="A3",
-                severity="minor",
-                step=step,
-                message=f"pending_routes['{step}'] 不在 completed 中",
-                fix_type="remove_stale_pending_route",
-                fix_data={"step": step},
-                auto_fixable=True,
-            ))
-
-
-# A4 (_a4_cache_lifecycle) 已移除。
-# cached_branch_results 的生命周期由 Hook② pbc 门控统一管理，不归属 invariant 层。
-# 详见 check_basic 文档注释。
+# Layer A (check_basic / _a1 ~ _a4) 已在 v7.0 全部移除。
+# 原因：写入后即时校验在合法瞬态窗口内引入不确定性自动修复。
+# 不变量检测现由 state_health_check.py 独立执行（仅报告，不修复）。
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -616,9 +488,9 @@ def _d3_join_liveness(state, router_steps, join_map, violations):
 
 def validate_all(state: dict, router_steps: list = None, join_map: dict = None,
                  entry_step: str = "") -> List[Violation]:
-    """全量不变量检查（四层叠加）。"""
+    """全量不变量检查（v7.0: Layer A 已移除，仅 B/C/D）。"""
     violations = []
-    violations.extend(check_basic(state))
+    # Layer A (check_basic) 已在 v7.0 移除
     if router_steps is not None:
         violations.extend(check_structural(state, router_steps))
     if router_steps is not None and join_map is not None:
@@ -735,8 +607,9 @@ def main():
             print(json.dumps({"status": "warning", "message": f"无法加载 registry.json: {registry_path}，跳过因果/并行检查"}))
 
     violations = []
+    # Layer A (check_basic) 已在 v7.0 移除
     if args.group == "basic":
-        violations = check_basic(state)
+        violations = []  # v7.0: basic 已移除
     elif args.group == "structural" and router_steps:
         violations = check_structural(state, router_steps)
     elif args.group == "causal" and router_steps and join_map is not None:
