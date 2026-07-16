@@ -15,7 +15,7 @@ model: "[5.2非思考](custom:model_1783442342861_fs8y4m0)"
 
 ### 1. 读取最小必要的运行数据
 
-用 Bash 读取 STATE.json 的 3 个字段（仅此而已，不读 ROUTER.json，不做拓扑分析）：
+用 Bash 读取 STATE.json 的关键字段（仅此而已，不读 ROUTER.json，不做拓扑分析）：
 
 ```bash
 python3 -c "
@@ -25,12 +25,23 @@ sid = '<workspace_id>'
 state = resolve_ws_state(sid)
 try:
     s = json.load(open(state))
-    print(f'executing={list(s.get(\"step_status\",{}).keys())}')
-    print(f'completed={list(s.get(\"completed\",{}).keys())}')
-    print(f'terminal={s.get(\"terminal_state\")}')
+    print(f'executing={list(s.get("step_status",{}).keys())}')
+    print(f'completed={list(s.get("completed",{}).keys())}')
+    print(f'terminal={s.get("terminal_state")}')
+    err = s.get('engine_error')
+    if err:
+        print(f'engine_error={err}')
+    dl = s.get('dispatch_log', [])
+    if dl:
+        print(f'dispatch_rounds={len(dl)}')
+        last = dl[-1]
+        print(f'last_dispatch=round{last["round"]}: {last["steps"]} (parallel={last["parallel"]})')
 except: print('NO_STATE')
 "
 ```
+
+**dispatch_log** 记录了每一轮分发的 step 列表，用于排查并行批次和引擎错误。
+**engine_error** 包含引擎最后一次出错的详细原因和建议 jump 目标。
 
 **仅当用户语义可能涉及切换/新建工作区时**，额外执行：
 ```bash

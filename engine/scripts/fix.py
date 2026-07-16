@@ -44,6 +44,12 @@ def main():
             output({"status": "failure", "error_code": "OIC-E104",
                     "message": "jump 需要 --step 参数", "new_state_snapshot": None})
         state = _do_jump(args.state_path, args.step)
+        # v7.2: 更新工作区索引
+        try:
+            from workspace_index import sync_from_state
+            sync_from_state(args.workspace_id or "default", state)
+        except Exception:
+            pass
         output({"status": "success", "error_code": None,
                 "new_state_snapshot": state, "message": f"jumped to {args.step}"})
 
