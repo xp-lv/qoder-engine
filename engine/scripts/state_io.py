@@ -33,35 +33,45 @@ def load_state(state_path):
         return None
 
 
-def _atomic_write(state_path, state):
-    """原子写入（tempfile + os.replace）+ 文件锁保护。"""
+def _write_unlocked(state_path, state):
+    """写入 STATE.json（tempfile + os.replace），不获取锁。
+
+    调用者必须已持有 lock_path 文件锁。
+    """
     d = os.path.dirname(state_path)
     if d:
         os.makedirs(d, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(suffix=".tmp", dir=d or ".")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(state, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, state_path)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
+
+def _atomic_write(state_path, state):
+    """原子写入（tempfile + os.replace）+ 文件锁保护。向后兼容封装。"""
     lock_path = state_path + ".lock"
+    d = os.path.dirname(state_path)
+    if d:
+        os.makedirs(d, exist_ok=True)
     with open(lock_path, "w") as lock_file:
         if not acquire_lock(lock_file):
             raise RuntimeError("获取 STATE.json 文件锁失败")
-
         try:
-            fd, tmp_path = tempfile.mkstemp(suffix=".tmp", dir=d or ".")
-            try:
-                with os.fdopen(fd, "w", encoding="utf-8") as f:
-                    json.dump(state, f, ensure_ascii=False, indent=2)
-                os.replace(tmp_path, state_path)
-            except Exception:
-                try:
-                    os.unlink(tmp_path)
-                except OSError:
-                    pass
-                raise
+            _write_unlocked(state_path, state)
         finally:
             release_lock(lock_file)
 
 
-def _post_write_check(state_path, state):
+def _post_write_check_inplace(state_path, state):
     """v5.0: 写入后立即执行基础不变量校验 + 安全自动修复。
+    v5.1: 使用 _write_unlocked（假设调用者已持有锁），消除二次锁获取竞态。
 
     策略：
     1. 运行 check_basic（INV-2, INV-3, INV-4, INV-9）
@@ -89,7 +99,7 @@ def _post_write_check(state_path, state):
         if fixable:
             fixed_state = _apply_basic_fixes(state, fixable)
             if fixed_state is not None:
-                _atomic_write(state_path, fixed_state)
+                _write_unlocked(state_path, fixed_state)
                 _log_violations(state_path, [
                     type("V", (), {
                         "inv_id": "POST_FIX", "severity": "info",
@@ -170,9 +180,9 @@ def _log_violations(state_path, violations):
 
 
 def save_state(state_path, state, validate=True):
-    """★ STATE.json 唯一写入函数 ★ (v5.0: Layer 2 写入后校验)
+    """★ STATE.json 唯一写入函数 ★ (v5.1: 持锁贯穿 写入→校验→修复)
 
-    原子写入（tempfile + os.replace）+ 文件锁保护。
+    v5.1: 在单一文件锁内完成 写入→校验→修复，消除两次锁获取之间的竞态窗口。
     v5.0: 写入后立即执行 check_basic，自动修复安全违规，记录日志。
 
     Args:
@@ -180,7 +190,52 @@ def save_state(state_path, state, validate=True):
         state: 要写入的 state dict
         validate: 是否执行写入后校验（init.py 创建初始空 STATE 时可传 False）
     """
-    _atomic_write(state_path, state)
+    d = os.path.dirname(state_path)
+    if d:
+        os.makedirs(d, exist_ok=True)
+    lock_path = state_path + ".lock"
+    with open(lock_path, "w") as lock_file:
+        if not acquire_lock(lock_file):
+            raise RuntimeError("获取 STATE.json 文件锁失败")
+        try:
+            _write_unlocked(state_path, state)
+            if validate and _INV_LOG_ENABLED:
+                _post_write_check_inplace(state_path, state)
+        finally:
+            release_lock(lock_file)
 
-    if validate:
-        _post_write_check(state_path, state)
+
+def modify_state_locked(state_path, modifier_fn, timeout=60):
+    """原子性 Read-Modify-Write：在单一文件锁内完成读、改、写、校验。
+
+    解决并行场景下 load_state → 内存修改 → save_state 之间的竞态问题。
+    所有需要修改 STATE.json 的场景应优先使用此函数替代分离的 load/save 模式。
+
+    Args:
+        state_path: STATE.json 路径
+        modifier_fn: 接收当前 state dict，返回修改后的 state dict（返回 None 表示不修改）
+        timeout: 获取锁超时秒数
+
+    Returns:
+        修改后的 state dict
+    """
+    d = os.path.dirname(state_path)
+    if d:
+        os.makedirs(d, exist_ok=True)
+    lock_path = state_path + ".lock"
+    with open(lock_path, "w") as lock_file:
+        if not acquire_lock(lock_file, timeout):
+            raise RuntimeError("获取 STATE.json 文件锁失败")
+        try:
+            st = load_state(state_path)
+            if st is None:
+                st = {}
+            modified = modifier_fn(st)
+            if modified is not None:
+                st = modified
+            _write_unlocked(state_path, st)
+            if _INV_LOG_ENABLED:
+                _post_write_check_inplace(state_path, st)
+            return st
+        finally:
+            release_lock(lock_file)

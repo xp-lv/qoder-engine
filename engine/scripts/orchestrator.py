@@ -13,7 +13,7 @@ import argparse, json, os, sys, subprocess, uuid
 from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from session_path import resolve_ws_state, resolve_app_path, resolve_workspace_output, get_edge_targets, is_edge_backward
-from state_io import load_state, save_state
+from state_io import load_state, save_state, modify_state_locked
 
 def now_iso():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -49,23 +49,27 @@ def run_script(cmd):
 
 def cache_dispatches(state_path, dispatches):
     """将 dispatches 缓存到 STATE.json，供 dispatch 阶段读取。
-    
+
     v4.0.1 修复：追加而非覆盖。多个并行分支的 post_execute 可能先后缓存
     dispatches，覆盖写会导致先缓存的独立目标 dispatch 被后缓存的覆盖丢失。
+    v5.1: 使用 modify_state_locked 保证 RMW 原子性。
     """
-    st = load_state(state_path)
-    existing = st.get("pending_dispatches") or []
-    st["pending_dispatches"] = existing + dispatches
-    save_state(state_path, st)
+    def _merge(st):
+        existing = st.get("pending_dispatches") or []
+        st["pending_dispatches"] = existing + dispatches
+        return st
+    modify_state_locked(state_path, _merge)
 
 # ─── 状态转换统一 API ───
 
 def mark_complete(state_path):
     """所有 complete 路径的唯一入口：写 terminal_state。"""
-    st = load_state(state_path)
-    if not st.get("terminal_state"):
-        st["terminal_state"] = "completed"
-        save_state(state_path, st)
+    def _set_complete(st):
+        if not st.get("terminal_state"):
+            st["terminal_state"] = "completed"
+            return st
+        return None
+    modify_state_locked(state_path, _set_complete)
 
 def load_router_and_registry(app_path):
     """加载 ROUTER.json 和 registry.json，返回 (router_steps, registry, reg_map, step_role_map)."""
@@ -278,6 +282,51 @@ def _process_dispatches(state_path, app_path, workspace_id, dispatches, from_ste
         "parallel": len(dispatches) > 1,
     })
 
+def _check_required_files(app_path, role_name, workspace_id, state_path=None):
+    """检查 schema.json 中声明的 _required_files 是否全部存在于磁盘。
+
+    返回缺失文件列表 [{name, path}]。模板路径（含 {）跳过。
+    """
+    import re
+    missing = []
+    schema_dir = re.sub(r'[^\w\u4e00-\u9fff]', '_', role_name)
+    schema_file = os.path.join(app_path, "roles", schema_dir, "schema.json")
+    if not os.path.exists(schema_file):
+        return missing
+    try:
+        with open(schema_file, "r", encoding="utf-8") as f:
+            schema = json.load(f)
+    except (json.JSONDecodeError, ValueError):
+        return missing
+
+    required_files = schema.get("_required_files", [])
+    if not required_files:
+        return missing
+
+    # workspace_id 为 None 时从 state_path 推导
+    ws_id = workspace_id
+    if not ws_id and state_path:
+        ws_id = os.path.basename(os.path.dirname(state_path))
+
+    from session_path import resolve_workspace_output
+    for rf in required_files:
+        rf_path = rf.get("path", "")
+        if not rf_path:
+            continue
+        # 跳过模板路径（如 app-v{iteration}.yaml）
+        if "{" in rf_path:
+            continue
+        rf_type = rf.get("type", "deliverable")
+        try:
+            resolved = resolve_workspace_output(ws_id, rf_path, app_path, rf_type)
+        except (FileNotFoundError, TypeError):
+            continue
+        if not os.path.exists(resolved):
+            missing.append({"name": rf.get("name", ""), "path": rf_path})
+
+    return missing
+
+
 # ─── Phase 2: post_execute（Gate 校验 + 路由决策）───
 
 def phase_post_execute(state_path, app_path, workspace_id, results_json):
@@ -304,23 +353,24 @@ def phase_post_execute(state_path, app_path, workspace_id, results_json):
         step = r.get("step", "")
         status = r.get("status", "")
         output_paths = [o.get("path", "") for o in r.get("outputs", [])]
-        # verdict 从 role-executor 返回值读取，不从产出物文件读
         role_verdict = r.get("verdict", "")
 
-        
         if status != "confirmed":
             failed.append({"step": step, "reason": f"role-executor status={status}", "error": r.get("error")})
             continue
 
+        _role = step_role_map.get(step, "")
+
+        # ── Phase A: 对该 step 的所有产出物逐一 Gate 校验，汇总结果 ──
+        step_gate_entries = []
+        step_all_pass = True
         for out_path in output_paths:
             if not out_path:
                 continue
-            # role-executor 返回的 path 已由 router 按 type 解析过，直接用
-            resolved_out = out_path
             gate_cmd = [
                 "python3", "engine/scripts/gate.py",
                 "--step", step,
-                "--output-path", resolved_out,
+                "--output-path", out_path,
                 "--state-path", state_path,
                 "--app-path", app_path,
             ]
@@ -334,77 +384,99 @@ def phase_post_execute(state_path, app_path, workspace_id, results_json):
             }
             if gate_result.get("errors"):
                 gate_entry["errors"] = gate_result["errors"]
+            step_gate_entries.append(gate_entry)
             gate_results.append(gate_entry)
 
-            if verdict == "PASS":
-                # verdict 从 role-executor 返回值读取（与产出物格式分离）
-                semantic_verdict = role_verdict
+            if verdict != "PASS":
+                step_all_pass = False
 
-                step_def = next((s for s in router_steps if s["step"] == step), None)
-                transitions = step_def.get("transitions", {}) if step_def else {}
+        if not step_gate_entries:
+            continue
 
-                # fail 是系统保留词（Gate 专属），角色输出无效
-                if semantic_verdict and semantic_verdict == "fail":
-                    semantic_verdict = None
-                effective_verdict = semantic_verdict or "confirmed"
-                route_key = effective_verdict if effective_verdict in transitions else ("confirmed" if "confirmed" in transitions else None)
-                if route_key is None:
-                    failed.append({"step": step, "reason": f"verdict={effective_verdict} 在 transitions 中无匹配边"})
-                    continue
+        # ── Phase B: _required_files 完整性校验（消费 schema.json 的 _required_files）──
+        missing_files = _check_required_files(app_path, _role, workspace_id, state_path)
+        for mf in missing_files:
+            gate_entry = {
+                "step": step,
+                "output_path": mf["path"],
+                "verdict": "FAIL",
+                "errors": [f"缺少必需产物: {mf['name']} ({mf['path']})"],
+            }
+            step_gate_entries.append(gate_entry)
+            gate_results.append(gate_entry)
+            step_all_pass = False
 
-                # 统一推进：gate PASS → advance（写入 finished + verdict）
-                _role = step_role_map.get(step, "")
-                blocking_mode = reg_map.get(_role, {}).get("blocking_mode", "manual")
-                if blocking_mode == "auto":
-                    advance_cmd = [
-                        "python3", "engine/scripts/set_state.py",
-                        "--action", "advance", "--step", step,
-                        "--role", _role, "--verdict", effective_verdict,
-                        "--state-path", state_path,
-                    ]
-                    run_script(advance_cmd)
-                    auto_confirmed.append({
-                        "step": step, "output_path": out_path,
-                        "verdict": verdict, "route_key": route_key,
-                        "errors": gate_result.get("errors", []),
-                    })
-                else:
-                    set_cmd = [
-                        "python3", "engine/scripts/set_state.py",
-                        "--action", "set_status", "--step", step,
-                        "--status", "awaiting_confirmation",
-                        "--state-path", state_path,
-                    ]
-                    run_script(set_cmd)
-                    pending.append({
-                        "step": step, "output_path": out_path,
-                        "verdict": verdict,
-                        "errors": gate_result.get("errors", []),
-                    })
-            elif verdict == "FAIL":
-                # Gate FAIL → advance（写入 finished），让 router 沿 fail 边找到回退目标
-                _role = step_role_map.get(step, "")
+        # ── Phase C: 单次 advance/set_status 决策（不再逐文件调用）──
+        if step_all_pass:
+            semantic_verdict = role_verdict
+            step_def = next((s for s in router_steps if s["step"] == step), None)
+            transitions = step_def.get("transitions", {}) if step_def else {}
+
+            # fail 是系统保留词（Gate 专属），角色输出无效
+            if semantic_verdict and semantic_verdict == "fail":
+                semantic_verdict = None
+            effective_verdict = semantic_verdict or "confirmed"
+            route_key = effective_verdict if effective_verdict in transitions else ("confirmed" if "confirmed" in transitions else None)
+            if route_key is None:
+                failed.append({"step": step, "reason": f"verdict={effective_verdict} 在 transitions 中无匹配边"})
+                continue
+
+            blocking_mode = reg_map.get(_role, {}).get("blocking_mode", "manual")
+            if blocking_mode == "auto":
                 advance_cmd = [
                     "python3", "engine/scripts/set_state.py",
                     "--action", "advance", "--step", step,
-                    "--role", _role, "--verdict", "fail",
+                    "--role", _role, "--verdict", effective_verdict,
                     "--state-path", state_path,
                 ]
                 run_script(advance_cmd)
                 auto_confirmed.append({
-                    "step": step, "output_path": out_path,
-                    "verdict": "FAIL", "route_key": "fail",
-                    "errors": gate_result.get("errors", []),
+                    "step": step, "output_path": step_gate_entries[0]["output_path"],
+                    "verdict": "PASS", "route_key": route_key,
+                    "errors": [],
                 })
+            else:
+                set_cmd = [
+                    "python3", "engine/scripts/set_state.py",
+                    "--action", "set_status", "--step", step,
+                    "--status", "awaiting_confirmation",
+                    "--state-path", state_path,
+                ]
+                run_script(set_cmd)
+                pending.append({
+                    "step": step, "output_path": step_gate_entries[0]["output_path"],
+                    "verdict": "PASS",
+                    "errors": [],
+                })
+        else:
+            # 任一产出物 Gate FAIL → advance with "fail"（单次调用）
+            advance_cmd = [
+                "python3", "engine/scripts/set_state.py",
+                "--action", "advance", "--step", step,
+                "--role", _role, "--verdict", "fail",
+                "--state-path", state_path,
+            ]
+            run_script(advance_cmd)
+            all_errors = []
+            for ge in step_gate_entries:
+                all_errors.extend(ge.get("errors", []))
+            auto_confirmed.append({
+                "step": step, "output_path": step_gate_entries[0]["output_path"],
+                "verdict": "FAIL", "route_key": "fail",
+                "errors": all_errors,
+            })
 
     # v4.2: 清理 failed 步骤的 step_status（inline 精准清理，禁止用 rollback 核弹 pending_dispatches）
     # 僵尸 executing 的深度清理由 state_health_check.py Z1 统一接管
+    # v5.1: 使用 modify_state_locked 保证 RMW 原子性
     for f in failed:
-        _st = load_state(state_path)
-        _ss = _st.get("step_status", {})
-        if f["step"] in _ss:
-            del _ss[f["step"]]
-            save_state(state_path, _st)
+        _fstep = f["step"]
+        def _cleanup_failed(st, _s=_fstep):
+            ss = st.get("step_status", {})
+            if _s in ss:
+                del ss[_s]
+            return st
+        modify_state_locked(state_path, _cleanup_failed)
 
     # error 最高优先级：只要有 failed 就报 error
     if failed:

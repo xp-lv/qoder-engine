@@ -20,7 +20,7 @@ Usage:
 import argparse, json, os, re, sys, uuid
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from session_path import resolve_ws_state, resolve_app_path, resolve_workspace_output, get_edge_targets, is_edge_backward
-from state_io import load_state as _io_load, save_state
+from state_io import load_state as _io_load, save_state, modify_state_locked
 
 def output(data):
     print(json.dumps(data, ensure_ascii=False))
@@ -141,12 +141,12 @@ def main():
 
         dispatchable.append(target)
 
-    # 如果递增了 edge_counts，写回 STATE.json（通过 state_io 统一写入）
+    # 如果递增了 edge_counts，写回 STATE.json（v5.1: 使用 modify_state_locked 保证 RMW 原子性）
     if edge_counts_changed:
-        st = _io_load(state_path)
-        if st is not None:
-            st["edge_counts"] = edge_counts
-            save_state(state_path, st)
+        def _update_counts(st, _ec=edge_counts):
+            st["edge_counts"] = _ec
+            return st
+        modify_state_locked(state_path, _update_counts)
 
     # ─── 组装 dispatch_instructions ───
 
