@@ -142,8 +142,7 @@ def phase_dispatch(state_path, app_path, workspace_id, from_steps, on_result, ta
         dispatches = pending
         # 消费 pending_routes（瞬态信号，用完即清空）
         _clear_pending_routes(state_path)
-        st = load_state(state_path)  # 重新读取以获取最新状态
-        _process_dispatches(state_path, app_path, workspace_id, dispatches, from_steps or [], task_request, st)
+        _process_dispatches(state_path, app_path, workspace_id, dispatches, from_steps or [], task_request)
         return
 
     # ── 冷路径：从 pending_routes（瞬态路由信号）出发路由 ──
@@ -187,9 +186,7 @@ def phase_dispatch(state_path, app_path, workspace_id, from_steps, on_result, ta
         # 清空 pending_routes（瞬态信号已消费完毕）
         _clear_pending_routes(state_path)
 
-        # v5.2: router.py 子进程可能已更新 edge_counts，重新读取最新 state
-        st = load_state(state_path)
-        _process_dispatches(state_path, app_path, workspace_id, all_dispatches, [], task_request, st)
+        _process_dispatches(state_path, app_path, workspace_id, all_dispatches, [], task_request)
         return
 
     # ── 热路径：有 from_steps 或初始调度（无 pending_routes）──
@@ -220,7 +217,7 @@ def phase_dispatch(state_path, app_path, workspace_id, from_steps, on_result, ta
         else:
             output({"status": "success", "next": "wait", "reason": message or "no_dispatchable_steps"})
 
-    _process_dispatches(state_path, app_path, workspace_id, dispatches, from_steps or [], task_request, st)
+    _process_dispatches(state_path, app_path, workspace_id, dispatches, from_steps or [], task_request)
 
 def _global_converge(dispatches, st, app_path):
     """v4.1 全局汇集：读 registry 的 input_groups 判断每个候选是否满足执行条件。
@@ -252,14 +249,13 @@ def _global_converge(dispatches, st, app_path):
     
     return filtered
 
-def _process_dispatches(state_path, app_path, workspace_id, dispatches, from_steps, task_request, st=None):
+def _process_dispatches(state_path, app_path, workspace_id, dispatches, from_steps, task_request):
     """v4.0: 统一处理 dispatch 列表。
     多 dispatch = 并行（主 Agent 同时发起多个 Task），单 dispatch = 单步。
-    
-    """
-    if st is None:
-        st = load_state(state_path)
 
+    v6.0: 将完整 dispatch 指令缓存到 STATE.json active_dispatches 字段，
+    供 _clear_zombie_executing 崩溃恢复时重建 pending_dispatches。
+    """
     # 所有 dispatch 统一 set_status executing
     for d in dispatches:
         set_cmd = [
@@ -277,6 +273,13 @@ def _process_dispatches(state_path, app_path, workspace_id, dispatches, from_ste
         ok_ss, ss_result = run_script(set_cmd)
         if not ok_ss:
             output_error("OIC-E012", f"set_state.py set_status 失败 (STEP {d['step']}): {ss_result}")
+
+    # v6.0: 缓存完整 dispatch 指令到 active_dispatches（step → dispatch_instruction 映射）
+    with state_txn(state_path) as st:
+        active = st.get("active_dispatches") or {}
+        for d in dispatches:
+            active[d["step"]] = d
+        st["active_dispatches"] = active
 
     output({
         "status": "success",

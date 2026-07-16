@@ -15,7 +15,7 @@ import argparse, json, os, sys, subprocess
 from collections import deque
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from session_path import resolve_ws_state, resolve_app_path
-from state_io import load_state, save_state
+from state_io import load_state, save_state, state_txn
 
 def output(data):
     print(json.dumps(data, ensure_ascii=False))
@@ -185,10 +185,11 @@ def _do_jump(state_path, app_path, workspace_id, target_step):
     state["completed"] = completed
     state["pending_routes"] = pending_routes
 
-    # 3. 清除 step_status / pending_dispatches / cached_branch_results
+    # 3. 清除 step_status / pending_dispatches / cached_branch_results / edge_counts
     state["step_status"] = {}
     state["pending_dispatches"] = None
     state["cached_branch_results"] = []
+    state["edge_counts"] = {}  # v6.0: 重置边级计数器，避免 jump 后错误触发 max_executions
 
     # 4. 将 target 的直接前驱写入 pending_routes
     # 让 --next 冷路径能从这些前驱出发重新 dispatch target
@@ -205,8 +206,10 @@ def _do_jump(state_path, app_path, workspace_id, target_step):
     if target_step == entry_step and not restored_routes:
         state["pending_routes"] = {}
 
-    # 6. 写入
-    save_state(state_path, state)
+    # 6. 写入（v6.0: 使用 state_txn 保证原子性）
+    with state_txn(state_path) as st:
+        st.clear()
+        st.update(state)
 
     print(
         f"[fix v5.0] jump to {target_step}: "

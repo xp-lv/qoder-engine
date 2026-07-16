@@ -59,33 +59,26 @@ def build_router_index(router_data):
 
 
 # ═══════════════════════════════════════════════════════════════
-# Z1: 僵尸 executing 启发式（保留，独立于不变量体系）
+# Z1: 僵尸 executing 启发式（v6.0: 并行安全重写）
 # ═══════════════════════════════════════════════════════════════
 
 def _z1_zombie_heuristic(state):
-    """Z1: 僵尸 executing 检测（运行时推断，非不变量）。
+    """Z1: 僵尸 executing 检测（v6.0: 并行安全版）。
 
-    推断依据：health_check 在 stability-analyzer 返回时运行，
-    此时如果有 executing 状态，说明上一个 role-executor 已经结束（正常返回或被取消），
-    其 executing 状态是残留的。
+    v5.x 缺陷：假设 "executing = 僵尸"，在并行场景下产生假阳性，
+    错误清除正在运行的并行分支。
 
-    v5.0 修复：rollback 只删 step_status，不删 completed。
-    重执行场景下 CP 中的记录是上一轮的合法完成记录，不应被清理。
+    v6.0 修复：不在 health_check 中自动清除 executing 状态。
+    并行场景下 step_status 中有 N 个 executing 是合法常态。
+    僵尸清除只在确定性触发点执行（role-executor 返回异常时的
+    Hook② _clear_zombie_executing），而非在 health_check 中盲猜。
+
+    保留此函数仅为检测信息记录（auto_fixable=False），
+    实际清理由 Hook② 在确定时机执行。
     """
     findings = []
-    ss = state.get("step_status", {})
-    for step, info in ss.items():
-        if isinstance(info, dict) and info.get("status") == "executing":
-            findings.append({
-                "id": "Z1",
-                "severity": "critical",
-                "category": "zombie_executing",
-                "description": f"步骤 '{step}' 处于 executing 但无活跃 Task（可能被取消或崩溃）",
-                "step": step,
-                "fix_type": "clear_zombie_executing",
-                "fix_data": {"step": step},
-                "auto_fixable": True,
-            })
+    # v6.0: 不再自动标记 executing 为僵尸
+    # 并行场景下 executing 是合法状态，盲猜清除会破坏 JOIN 收敛
     return findings
 
 
@@ -170,7 +163,7 @@ def check_health(state, router_steps, join_map, entry_step=""):
     """
     findings = []
 
-    # 1. 不变量校验（INV-1 ~ INV-9）
+    # 1. 不变量校验（A1-A4, B1-B2, C1-C3, D1-D3）
     violations = validate_all(state, router_steps, join_map, entry_step)
     for v in violations:
         findings.append({
@@ -212,13 +205,11 @@ def apply_fixes(state, findings):
         step = f.get("step", "")
         fix_data = f.get("fix_data", {})
 
-        # ── Z1: 清理僵尸 executing（v5.0: 只删 SS，不删 CP）──
+        # ── Z1 僵尸清除已移至 Hook② 确定性触发点（v6.0）──
+        # health_check 不再自动清除 executing（并行安全）
         if fix_type == "clear_zombie_executing":
-            target_step = fix_data.get("step", step)
-            ss = state.get("step_status", {})
-            if target_step in ss:
-                del ss[target_step]
-                actions.append(f"clear_zombie: {target_step}（仅清 step_status，保留 completed）")
+            # v6.0: 不在 health_check 中自动清除，仅记录
+            actions.append(f"skip_zombie_clear: {step}（需 Hook② 确定性触发）")
 
         # ── INV-1: 删除非法步骤引用 ──
         elif fix_type == "remove_illegal_step_status":

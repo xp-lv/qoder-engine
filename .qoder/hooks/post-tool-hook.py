@@ -400,26 +400,52 @@ def _hook2_log(msg):
         pass
 
 
-def _clear_zombie_executing(sid, reason=""):
-    """清理僵尸 executing：从 STATE 的 step_status 中删除所有 executing 条目。
+def _clear_zombie_executing(sid, reason="", target_step=None, redispatch=True):
+    """清理僵尸 executing：从 STATE 的 step_status 中删除 executing 条目。
 
-    触发场景：role-executor 返回非 JSON、返回异常状态、或 Task 被取消。
-    正常返回（status=confirmed）时不调用此函数。
+    v6.0 机制修复：清除崩溃分支时，从 active_dispatches 恢复完整 dispatch 指令
+    到 pending_dispatches，使下一轮 --next 自动重新 dispatch 崩溃的分支。
 
-    关键设计：只删 step_status，不删 completed（保护重执行场景的上一轮完成记录）。
-    v5.2: 使用 state_txn 原子事务，消除 RMW 竞态。
+    Args:
+      target_step: 指定时只清除该 step（并行场景保护其他活跃分支）。None 时清除全部。
+      redispatch: True 时将 dispatch 指令恢复到 pending_dispatches（崩溃恢复）。
+                  False 时只清除不恢复（BLOCKING 场景，角色有意阻塞不重 dispatch）。
     """
     try:
         sp = resolve_ws_state(sid)
         cleared = []
+        redispatched = []
         with state_txn(sp) as st:
             ss = st.get("step_status", {})
-            cleared = [s for s, info in ss.items()
-                       if isinstance(info, dict) and info.get("status") == "executing"]
-            for z in cleared:
-                del ss[z]
+            active = st.get("active_dispatches") or {}
+            pending = st.get("pending_dispatches") or []
+
+            for s, info in list(ss.items()):
+                if not (isinstance(info, dict) and info.get("status") == "executing"):
+                    continue
+                # v6.0: target_step 指定时只清除该 step
+                if target_step is not None and s != target_step:
+                    continue
+                cleared.append(s)
+                del ss[s]
+                # v6.0: 从 active_dispatches 恢复 dispatch 指令（仅崩溃场景）
+                if redispatch and s in active:
+                    dispatch = active[s]
+                    del active[s]
+                    # 生成新 checkpoint_id（旧的已随崩溃失效）
+                    import uuid
+                    dispatch["checkpoint_id"] = f"ckpt_{uuid.uuid4().hex[:12]}"
+                    pending.append(dispatch)
+                    redispatched.append(s)
+
+            st["active_dispatches"] = active
+            st["pending_dispatches"] = pending if pending else None
+
         if cleared:
-            _hook2_log(f"ZOMBIE_CLEAR: cleared {cleared} ({reason})")
+            msg = f"cleared {cleared}"
+            if redispatched:
+                msg += f", redispatched {redispatched}"
+            _hook2_log(f"ZOMBIE_CLEAR: {msg} ({reason})")
         return cleared
     except Exception as e:
         _hook2_log(f"ZOMBIE_CLEAR_ERROR: {e} ({reason})")
@@ -468,12 +494,14 @@ def handle_role_executor_return(tool_output, workspace_id):
 
     # ── 状态检查（非 confirmed 状态直接报告 + 清理僵尸）──
     if status == "BLOCKING":
-        zombies = _clear_zombie_executing(sid, "role-executor 返回 BLOCKING")
+        # v6.0: BLOCKING 是角色有意阻塞，清除但不重 dispatch
+        zombies = _clear_zombie_executing(sid, "role-executor 返回 BLOCKING", target_step=step, redispatch=False)
         zombie_msg = f"（已清理僵尸 executing: {zombies}）" if zombies else ""
         emit(f"BLOCKING：role-executor 返回 BLOCKING{zombie_msg}。向用户报告以下信息：\n{json.dumps(data, ensure_ascii=False)[:500]}")
         return
     if status != "confirmed":
-        zombies = _clear_zombie_executing(sid, f"role-executor 异常状态 '{status}'")
+        # v6.0: 精确清除崩溃的 step，保护并行中其他活跃分支
+        zombies = _clear_zombie_executing(sid, f"role-executor 异常状态 '{status}'", target_step=step)
         zombie_msg = f"（已清理僵尸 executing: {zombies}）" if zombies else ""
         emit(f"BLOCKING：role-executor 返回异常状态 '{status}'{zombie_msg}，向用户报告此问题。")
         return
@@ -495,7 +523,8 @@ def handle_role_executor_return(tool_output, workspace_id):
     # submit 失败时清理僵尸并报错
     if submit_result.get("action") == "error" or submit_result.get("status") == "error":
         _err = submit_result.get("error", "submit 失败")
-        zombies = _clear_zombie_executing(sid, f"submit 失败: {_err}")
+        # v6.0: 精确清除崩溃的 step
+        zombies = _clear_zombie_executing(sid, f"submit 失败: {_err}", target_step=step)
         zombie_msg = f"（已清理僵尸 executing: {zombies}）" if zombies else ""
         emit(f"BLOCKING：引擎错误 — {_err}{zombie_msg}")
         return

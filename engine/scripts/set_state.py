@@ -55,6 +55,8 @@ def do_reset(state):
     state["edge_counts"] = {}
     state["terminal_state"] = None
     state["pending_dispatches"] = None
+    state["active_dispatches"] = {}
+    state["cached_branch_results"] = []
     state["history"] = []
 
 def do_advance(state, step, role, dispatch_id, verdict=None):
@@ -76,6 +78,10 @@ def do_advance(state, step, role, dispatch_id, verdict=None):
     state.setdefault("completed", {})[step] = result
     state.setdefault("pending_routes", {})[step] = result
     state["metadata"]["last_advance_at"] = now_iso()
+    # v6.0: 清理 active_dispatches 中已完成 step 的 dispatch 缓存
+    active = state.get("active_dispatches")
+    if active and step in active:
+        del active[step]
 
 def do_resume(state, step):
     completed = state.get("completed", {})
