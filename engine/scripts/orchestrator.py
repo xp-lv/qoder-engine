@@ -253,31 +253,23 @@ def _process_dispatches(state_path, app_path, workspace_id, dispatches, from_ste
     """v4.0: 统一处理 dispatch 列表。
     多 dispatch = 并行（主 Agent 同时发起多个 Task），单 dispatch = 单步。
 
-    v6.0: 将完整 dispatch 指令缓存到 STATE.json active_dispatches 字段，
-    供 _clear_zombie_executing 崩溃恢复时重建 pending_dispatches。
+    v6.0: 在同一 state_txn 内原子写入 step_status 和 active_dispatches，
+    消除 set_status（子进程）与 active_dispatches 缓存之间的崩溃间隙。
     """
-    # 所有 dispatch 统一 set_status executing
-    for d in dispatches:
-        set_cmd = [
-            "python3", "engine/scripts/set_state.py",
-            "--action", "set_status",
-            "--step", d["step"],
-            "--status", "executing",
-            "--role", d["role"],
-            "--dispatch-id", d["checkpoint_id"],
-            "--state-path", state_path,
-        ]
-        # 传递 from_steps 用于 verdict_context 运行时过滤
-        if from_steps:
-            set_cmd += ["--from-steps", json.dumps(from_steps)]
-        ok_ss, ss_result = run_script(set_cmd)
-        if not ok_ss:
-            output_error("OIC-E012", f"set_state.py set_status 失败 (STEP {d['step']}): {ss_result}")
-
-    # v6.0: 缓存完整 dispatch 指令到 active_dispatches（step → dispatch_instruction 映射）
+    # v6.0: 原子写入 step_status + active_dispatches（消除间隙）
     with state_txn(state_path) as st:
+        ss = st.setdefault("step_status", {})
         active = st.get("active_dispatches") or {}
         for d in dispatches:
+            entry = {
+                "role": d["role"],
+                "status": "executing",
+                "dispatch_id": d["checkpoint_id"],
+                "started_at": now_iso(),
+            }
+            if from_steps:
+                entry["from_steps"] = from_steps
+            ss[d["step"]] = entry
             active[d["step"]] = d
         st["active_dispatches"] = active
 

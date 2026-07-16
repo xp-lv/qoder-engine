@@ -38,6 +38,8 @@ def create_initial_state():
         "pending_routes": {},
         "edge_counts": {},
         "pending_dispatches": None,
+        "active_dispatches": {},
+        "cached_branch_results": [],
         "history": [],
         "metadata": {"started_at": now_iso(), "last_advance_at": None, "user_request": ""}
     }

@@ -156,6 +156,18 @@ def _a2_terminal_completeness(state, violations):
             auto_fixable=True,
         ))
 
+    ad = state.get("active_dispatches", {})
+    if ad:
+        violations.append(Violation(
+            inv_id="A2",
+            severity="major",
+            step="",
+            message=f"terminal_state='{ts}' 但 active_dispatches 有 {len(ad)} 条残留",
+            fix_type="clear_active_dispatches_on_terminal",
+            fix_data={},
+            auto_fixable=True,
+        ))
+
 
 def _a3_pending_routes_subset(state, violations):
     """A3: pending_routes 中的 step 必须也在 completed 中。"""

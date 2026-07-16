@@ -185,11 +185,12 @@ def _do_jump(state_path, app_path, workspace_id, target_step):
     state["completed"] = completed
     state["pending_routes"] = pending_routes
 
-    # 3. 清除 step_status / pending_dispatches / cached_branch_results / edge_counts
+    # 3. 清除 step_status / pending_dispatches / cached_branch_results / edge_counts / active_dispatches
     state["step_status"] = {}
     state["pending_dispatches"] = None
     state["cached_branch_results"] = []
-    state["edge_counts"] = {}  # v6.0: 重置边级计数器，避免 jump 后错误触发 max_executions
+    state["edge_counts"] = {}  # v6.0: 重置边级计数器
+    state["active_dispatches"] = {}  # v6.0: 清除 dispatch 缓存，避免陈旧指令恢复
 
     # 4. 将 target 的直接前驱写入 pending_routes
     # 让 --next 冷路径能从这些前驱出发重新 dispatch target

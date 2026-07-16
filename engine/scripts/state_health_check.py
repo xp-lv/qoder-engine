@@ -288,10 +288,15 @@ def apply_fixes(state, findings):
                 state["pending_dispatches"] = disp_list if disp_list else None
                 actions.append(f"remove_unsatisfied_dispatch[{idx}]: {removed.get('step', '?')}")
 
-        # ── INV-9: 清空 stale cache ──
+        # ── A4/INV-9: 清空 stale cache ──
         elif fix_type == "clear_cached_branch_results":
             state["cached_branch_results"] = []
             actions.append("clear_cached_branch_results")
+
+        # ── A2: 清空终态残留的 active_dispatches ──
+        elif fix_type == "clear_active_dispatches_on_terminal":
+            state["active_dispatches"] = {}
+            actions.append("clear_active_dispatches_on_terminal")
 
         # ── Z3: 重建断裂 JOIN 的 pending_routes ──
         elif fix_type == "regenerate_dispatch":
