@@ -40,6 +40,7 @@ def create_initial_state():
         "pending_dispatches": None,
         "active_dispatches": {},
         "cached_branch_results": [],
+        "engine_error": None,
         "history": [],
         "metadata": {"started_at": now_iso(), "last_advance_at": None, "user_request": ""}
     }
@@ -59,6 +60,7 @@ def do_reset(state):
     state["pending_dispatches"] = None
     state["active_dispatches"] = {}
     state["cached_branch_results"] = []
+    state["engine_error"] = None
     state["history"] = []
 
 
@@ -89,6 +91,8 @@ def _clear_snapshots(state_path):
         shutil.rmtree(snapshot_dir)
 
 def do_advance(state, step, role, dispatch_id, verdict=None):
+    # v7.1: advance 成功 → 清除 engine_error 标志位
+    state["engine_error"] = None
     ss = state.get("step_status", {})
     existing = ss.get(step, {})
     if not dispatch_id:

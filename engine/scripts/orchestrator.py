@@ -184,9 +184,9 @@ def phase_dispatch(state_path, app_path, workspace_id, from_steps, on_result, ta
                 diag_st = load_state(state_path)
                 reason, is_error = _diagnose_wait_reason(diag_st, app_path)
                 next_val = "error" if is_error else "wait"
+                if is_error:
+                    _mark_engine_error(state_path, reason)
                 output({"status": "success", "next": next_val, "reason": reason})
-
-        # 清空 pending_routes（瞬态信号已消费完毕）
         _clear_pending_routes(state_path)
 
         _process_dispatches(state_path, app_path, workspace_id, all_dispatches, [], task_request)
@@ -221,6 +221,8 @@ def phase_dispatch(state_path, app_path, workspace_id, from_steps, on_result, ta
             diag_st = load_state(state_path)
             reason, is_error = _diagnose_wait_reason(diag_st, app_path)
             next_val = "error" if is_error else "wait"
+            if is_error:
+                _mark_engine_error(state_path, reason)
             output({"status": "success", "next": next_val, "reason": reason})
 
     _process_dispatches(state_path, app_path, workspace_id, dispatches, from_steps or [], task_request)
@@ -264,19 +266,36 @@ def _find_last_good_step(st):
     completed = st.get("completed", {})
     if not completed:
         return None
-    # 按 created_at 时间戳排序，取最后一个 verdict=confirmed 的
     confirmed_steps = [
         (step, info.get("created_at", ""))
         for step, info in completed.items()
         if info.get("verdict") == "confirmed"
     ]
     if not confirmed_steps:
-        # 没有 confirmed verdict 的，取最后一个
         all_steps = [(step, info.get("created_at", "")) for step, info in completed.items()]
         if not all_steps:
             return None
         return sorted(all_steps, key=lambda x: x[1])[-1][0]
     return sorted(confirmed_steps, key=lambda x: x[1])[-1][0]
+
+
+def _mark_engine_error(state_path, reason):
+    """v7.1: 引擎出错时在 STATE.json 中写入 error 标志位。
+
+    用于：
+    1. 排查问题：记录引擎最后一次出错的详细原因
+    2. 快照联动：下次 advance 生成快照时会自动携带此标志，
+       使快照同时具备 jump 还原和问题排查两个功能。
+    """
+    try:
+        with state_txn(state_path) as st:
+            st["engine_error"] = {
+                "reason": reason,
+                "timestamp": now_iso(),
+                "last_good_step": _find_last_good_step(st),
+            }
+    except Exception:
+        pass
 
 
 def _diagnose_wait_reason(st, app_path):
@@ -622,6 +641,8 @@ def phase_post_execute(state_path, app_path, workspace_id, results_json):
                         "auto_confirmed": auto_confirmed, "gate_results": gate_results, "failed": failed})
             reason, is_error = _diagnose_wait_reason(st, app_path)
             next_val = "error" if is_error else "wait"
+            if is_error:
+                _mark_engine_error(state_path, reason)
             output({"status": "success", "next": next_val, "reason": reason,
                     "auto_confirmed": auto_confirmed, "gate_results": gate_results, "failed": failed})
 
@@ -704,6 +725,8 @@ def phase_post_confirm(state_path, app_path, workspace_id, decisions_json):
         diag_st = load_state(state_path)
         reason, is_error = _diagnose_wait_reason(diag_st, app_path)
         next_val = "error" if is_error else "wait"
+        if is_error:
+            _mark_engine_error(state_path, reason)
         output({"status": "success", "next": next_val, "reason": reason})
 
 # ─── main ───
