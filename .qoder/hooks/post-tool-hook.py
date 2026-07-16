@@ -448,17 +448,25 @@ def handle_role_executor_return(tool_output, workspace_id):
         """v4.1: pbc 从 step_status 派生，不再使用独立计数器。
         消除多源冲突：step_status 是 set_state.py 唯一写者维护的权威源。
         rollback 删除 step_status 条目时，pbc 自然递减，无需手动清零。
+        v7.0.2: 仅计算 status="executing" 的步骤，排除 awaiting_confirmation。
+        awaiting_confirmation 表示步骤已完成但等待用户确认，不是"正在执行"，
+        不应阻塞 Hook② 的 confirm/delegate 决策。
         """
         try:
             sp = resolve_ws_state(sid)
             st = load_json_file(sp) or {}
-            return len(st.get("step_status", {}))
+            return sum(1 for v in st.get("step_status", {}).values()
+                       if isinstance(v, dict) and v.get("status") == "executing")
         except Exception:
             return 0
 
     sid_fallback = workspace_id or "default"
 
-    data = extract_json_from_text(tool_output, required_keys=["status"])
+    # v7.0: status 不再由 role-executor 显式写入，由 Hook② 根据返回内容自动推导。
+    # fail-safe 原则：默认 fail，仅在返回合法 JSON 且含关键字段时覆盖为 confirmed。
+    # 兼容：如果 role-executor 仍然显式写了 status，以显式值为准（向后兼容）。
+    # v7.0.1: required_keys 从 ["status"] 改为 ["step"]，确保匹配协议信封而非产出物内容 JSON。
+    data = extract_json_from_text(tool_output, required_keys=["step"])
     if not data:
         # v5.0: role-executor 返回非 JSON（Task 被取消/崩溃/超时）
         # → 立即清理僵尸 executing，不再等待 Z1 事后检测
@@ -467,25 +475,46 @@ def handle_role_executor_return(tool_output, workspace_id):
         emit(f"BLOCKING：role-executor 返回格式异常，无法解析为 JSON{zombie_msg}。向用户报告此问题，不要继续推进流程。")
         return
 
-    status = data.get("status", "")
     sid = data.get("workspace_id", sid_fallback)
     branch_id = data.get("branch_id", None)
     outputs = data.get("outputs", [])
-    role_verdict = data.get("verdict", "")  # 从 role-executor 返回值读 verdict
+    role_verdict = data.get("verdict", "")
     step = data.get("step", "")
 
-    # ── 状态检查（非 confirmed 状态直接报告 + 清理僵尸）──
-    if status == "BLOCKING":
+    # ── v7.0: status 自动推导（fail-safe: 默认 fail）──
+    explicit_status = data.get("status", "")  # role-executor 可能显式写了 status（向后兼容）
+    if explicit_status == "BLOCKING":
         # v6.0: BLOCKING 是角色有意阻塞，清除但不重 dispatch
         zombies = _clear_zombie_executing(sid, "role-executor 返回 BLOCKING", target_step=step, redispatch=False)
         zombie_msg = f"（已清理僵尸 executing: {zombies}）" if zombies else ""
         emit(f"BLOCKING：role-executor 返回 BLOCKING{zombie_msg}。向用户报告以下信息：\n{json.dumps(data, ensure_ascii=False)[:500]}")
         return
-    if status != "confirmed":
-        # v6.0: 精确清除崩溃的 step，保护并行中其他活跃分支
-        zombies = _clear_zombie_executing(sid, f"role-executor 异常状态 '{status}'", target_step=step)
+    if explicit_status and explicit_status not in ("confirmed", "BLOCKING"):
+        # 显式写了非 confirmed/BLOCKING 的 status → 异常
+        zombies = _clear_zombie_executing(sid, f"role-executor 异常状态 '{explicit_status}'", target_step=step)
         zombie_msg = f"（已清理僵尸 executing: {zombies}）" if zombies else ""
-        emit(f"BLOCKING：role-executor 返回异常状态 '{status}'{zombie_msg}，向用户报告此问题。")
+        emit(f"BLOCKING：role-executor 返回异常状态 '{explicit_status}'{zombie_msg}，向用户报告此问题。")
+        return
+
+    # fail-safe 推导：status 默认 fail，以下条件全部满足才覆盖为 confirmed
+    # 1) 显式写了 status=confirmed（向后兼容），或
+    # 2) 未写 status 但返回了合法 JSON 且含 step + (verdict 或 result.verdict)
+    has_step = bool(step)
+    has_verdict = bool(role_verdict) or bool(data.get("result", {}).get("verdict", ""))
+    if explicit_status == "confirmed":
+        status = "confirmed"
+    elif not explicit_status and has_step and has_verdict:
+        # role-executor 未写 status 但返回了完整数据 → 推导为 confirmed
+        status = "confirmed"
+    else:
+        status = "fail"
+
+    if status == "fail":
+        # fail-safe：推导后仍为 fail → 清理僵尸并 BLOCKING
+        reason = "返回 JSON 缺少关键字段（step/verdict）且未显式声明 status=confirmed"
+        zombies = _clear_zombie_executing(sid, f"role-executor 推导状态 fail: {reason}", target_step=step)
+        zombie_msg = f"（已清理僵尸 executing: {zombies}）" if zombies else ""
+        emit(f"BLOCKING：role-executor 执行结果无法确认为成功{zombie_msg}。向用户报告此问题。")
         return
 
     # ── 调 step.py --submit ──

@@ -280,14 +280,14 @@ def _build_task_prompt(dispatch, workspace_id, state_path, app_path=None):
     lines.append(f"1. Read skill 文件")
     lines.append(f"2. 按 skill 文件的步骤执行")
     lines.append(f"3. 用 Write 写入产出物到指定路径")
-    # verdict 从返回值读取（不从产出物文件读），产出物可以是任意格式
+    # v7.0: status 不再要求 role-executor 显式写入，由 Hook② 自动推导。
+    # role-executor 只需返回 step + verdict + outputs，status 由系统判定。
     verdict_hint = ""
     schema_constraints = dispatch.get("schema_constraints", {})
     verdict_enum = schema_constraints.get("verdict_enum")
     if verdict_enum:
         verdict_hint = f'，verdict 从以下值中选择: {", ".join(verdict_enum)}'
-    lines.append(f'4. 返回 JSON：{{"status": "confirmed", "step": "{step}", "workspace_id": "{workspace_id}", "verdict": "<verdict值>"{verdict_hint}, "outputs": [产出物列表]}}')
-
+    lines.append(f'4. 返回 JSON：{{"step": "{step}", "workspace_id": "{workspace_id}", "verdict": "<verdict值>"{verdict_hint}, "outputs": [产出物列表]}}')
     return "\n".join(lines)
 
 

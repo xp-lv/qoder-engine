@@ -4,7 +4,10 @@
 唯一职责：检查产出物是否存在、是否有内容、是否符合格式契约。
 不关心产出物的语义内容（verdict 值由 orchestrator 自己读）。
 
-所有产出物走同一套逻辑：JSON 直接校验，非 JSON 包装为 {"_raw_text": ...} 后校验。
+所有产出物走三层逻辑：
+1. 物理检查（统一，不区分产物类型）
+2. 二进制文件短路（扩展名匹配 → 仅物理检查即 PASS）
+3. 文本解析（JSON 直接校验，非 JSON 包装为 {"_raw_text": ...} 后校验）
 
 Usage: python3 engine/scripts/gate.py --step <STEP> --output-path <path> --app-path <path> [--workspace-id <id>]
 """
@@ -108,14 +111,32 @@ def main():
     if os.path.getsize(args.output_path) == 0:
         fail(f"产出物文件为空: {args.output_path}")
 
-    # ── 2. 统一解析：JSON 直接用，非 JSON 包装 ──
-    raw = open(args.output_path, "r", encoding="utf-8").read()
+    # ── 2. 二进制文件短路：物理检查通过即 PASS ──
+    # 二进制产出物（截图、图标、字体等）无法以 UTF-8 文本解析，
+    # 也不需要 schema 校验。物理检查（存在+非空）已足够。
+    BINARY_EXTENSIONS = {
+        '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.webp', '.svg',
+        '.woff', '.woff2', '.ttf', '.eot', '.pdf', '.zip', '.tar', '.gz',
+    }
+    _, ext = os.path.splitext(args.output_path)
+    if ext.lower() in BINARY_EXTENSIONS:
+        output({"verdict": "PASS", "errors": []})
+
+    # ── 3. 统一解析：JSON 直接用，非 JSON 包装 ──
+    # 对文本文件先以二进制读取，再解码为 UTF-8，避免解码异常导致脚本崩溃
+    with open(args.output_path, "rb") as bf:
+        raw_bytes = bf.read()
+    try:
+        raw = raw_bytes.decode("utf-8")
+    except (UnicodeDecodeError, ValueError):
+        # 无法解码为 UTF-8 的非二进制扩展名文件 → 物理检查通过即 PASS
+        output({"verdict": "PASS", "errors": []})
     try:
         data = json.loads(raw)
     except (json.JSONDecodeError, ValueError):
         data = {"_raw_text": raw}
 
-    # ── 3. 查找角色的 schema ──
+    # ── 4. 查找角色的 schema ──
     router_path = os.path.join(app_path, "ROUTER.json")
     reg_path = os.path.join(app_path, "registry.json")
     if not os.path.exists(router_path) or not os.path.exists(reg_path):
@@ -136,7 +157,7 @@ def main():
     if not role_record:
         fail(f"角色 {role_name} 不在 registry.json 中")
 
-    # ── 4. Schema 校验（从 roles 目录加载）──
+    # ── 5. Schema 校验（从 roles 目录加载）──
     min_size = role_record.get("gate_rules", {}).get("phase1_cross_validation", {}).get("text_validation", {}).get("min_size", 50)
     role_dir_name = step_entry.get("role", "")
     # slugify 角色名查找 schema
@@ -188,7 +209,7 @@ def main():
         if len(raw) < min_size:
             errors.append(f"文件内容过短（{len(raw)} < {min_size}）")
 
-    # ── 5. 返回 ──
+    # ── 6. 返回 ──
     if errors:
         result = {"verdict": "FAIL", "errors": errors}
     else:

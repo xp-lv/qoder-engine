@@ -484,11 +484,14 @@ def phase_post_execute(state_path, app_path, workspace_id, results_json):
 
     for r in results:
         step = r.get("step", "")
-        status = r.get("status", "")
+        # v7.0: status 由 Hook② 推导后注入。如果 status 仍缺失（理论上不应发生），
+        # fail-safe: 默认 confirmed（因为 Hook② 已过滤了失败 case，能到这里说明已通过协议层）。
+        # 显式 fail/BLOCKING 才判失败。
+        status = r.get("status", "confirmed")
         output_paths = [o.get("path", "") for o in r.get("outputs", [])]
         role_verdict = r.get("verdict", "")
 
-        if status != "confirmed":
+        if status not in ("confirmed", ""):
             failed.append({"step": step, "reason": f"role-executor status={status}", "error": r.get("error")})
             continue
 
