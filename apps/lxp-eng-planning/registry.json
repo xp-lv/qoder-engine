@@ -1,5 +1,163 @@
 [
   {
+    "role_name": "迭代守门人",
+    "skill_path": "roles/迭代守门人/skill.md",
+    "blocking_mode": "manual",
+    "role_type": "producer",
+    "outputs": [
+      {
+        "name": "迭代判定报告",
+        "path": "outputs/迭代判定报告.json",
+        "type": "process"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true,
+        "text_validation": {
+          "min_size": 50
+        }
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "principles": "roles/迭代守门人/principles.md",
+    "input_groups": [
+      [
+        "综合裁决者"
+      ],
+      [
+        "迭代守门人-validate"
+      ],
+      [
+        "迭代守门人"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "迭代守门人（校验）",
+    "skill_path": "roles/迭代守门人_校验_/skill.md",
+    "blocking_mode": "auto",
+    "role_type": "standard",
+    "outputs": [
+      {
+        "name": "迭代守门人校验报告",
+        "path": "outputs/迭代守门人-validation.json",
+        "type": "deliverable"
+      }
+    ],
+    "inputs": [
+      {
+        "name": "迭代判定报告",
+        "path": "outputs/迭代判定报告.json",
+        "type": "process"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true,
+        "rules": [
+          {
+            "type": "field_exists",
+            "field": "result.verdict",
+            "must_be_non_empty": true,
+            "description": "校验角色必须输出 result.verdict"
+          }
+        ]
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "principles": "roles/迭代守门人/principles.md",
+    "input_groups": [
+      [
+        "迭代守门人"
+      ],
+      [
+        "迭代守门人-validate"
+      ]
+    ],
+    "verdicts": [
+      "fresh_start",
+      "incremental",
+      "loop"
+    ]
+  },
+  {
+    "role_name": "用户反馈收集者",
+    "skill_path": "roles/用户反馈收集者/skill.md",
+    "blocking_mode": "manual",
+    "role_type": "standard",
+    "outputs": [
+      {
+        "name": "迭代需求",
+        "path": "outputs/迭代需求.md",
+        "type": "deliverable"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true,
+        "text_validation": {
+          "min_size": 50
+        }
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "前端代码",
+        "path": "outputs/src/frontend/",
+        "type": "deliverable"
+      },
+      {
+        "name": "后端代码",
+        "path": "outputs/src/backend/",
+        "type": "deliverable"
+      },
+      {
+        "name": "最终裁决书",
+        "path": "outputs/最终裁决书.md",
+        "type": "deliverable"
+      },
+      {
+        "name": "部署指南",
+        "path": "outputs/部署指南.md",
+        "type": "deliverable"
+      }
+    ],
+    "input_groups": [
+      [
+        "迭代守门人-validate"
+      ],
+      [
+        "用户反馈收集者"
+      ]
+    ],
+    "verdicts": [
+      "backend_fix",
+      "design_fix",
+      "frontend_fix",
+      "no_change"
+    ]
+  },
+  {
     "role_name": "需求接收者",
     "skill_path": "roles/需求接收者/skill.md",
     "blocking_mode": "manual",
@@ -27,6 +185,9 @@
     },
     "principles": "roles/需求接收者/principles.md",
     "input_groups": [
+      [
+        "迭代守门人-validate"
+      ],
       [
         "需求接收者-validate"
       ],
@@ -483,6 +644,9 @@
     ],
     "input_groups": [
       [
+        "用户反馈收集者"
+      ],
+      [
         "交叉审核者"
       ],
       [
@@ -550,6 +714,9 @@
       }
     ],
     "input_groups": [
+      [
+        "用户反馈收集者"
+      ],
       [
         "交叉审核者"
       ],
@@ -875,6 +1042,9 @@
     "principles": "roles/前端实现者/principles.md",
     "input_groups": [
       [
+        "用户反馈收集者"
+      ],
+      [
         "交互逻辑设计师",
         "美学布局设计师",
         "接口翻译师"
@@ -1018,6 +1188,9 @@
     ],
     "principles": "roles/后端实现者/principles.md",
     "input_groups": [
+      [
+        "用户反馈收集者"
+      ],
       [
         "后端架构设计师",
         "数据模型设计师",

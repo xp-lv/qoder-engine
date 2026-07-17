@@ -693,13 +693,33 @@ def phase_post_confirm(state_path, app_path, workspace_id, decisions_json):
 
     router_steps, _, _, step_role_map = load_router_and_registry(app_path)
 
-    # 用户决策 = verdict：confirmed 走 advance，fail 也走 advance（统一推进）
+    # v7.0.3: 用户决策不再覆盖 role 的原始 verdict。
+    # 用户说 "confirmed" 意思是"我确认这个裁决有效"，不是"把 verdict 改成 confirmed"。
+    # fail 才是真正的拒绝（覆盖为 fail）。
+    # 如果用户 confirmed，保留 role-executor 返回的原始 verdict（如 deploy_doc_defect、challenged）。
     advance_steps = []
     for d in decisions:
         step = d.get("step", "")
         decision = d.get("decision", "")
-        verdict = "confirmed" if decision == "confirmed" else "fail"
         _role = step_role_map.get(step, "")
+
+        if decision == "fail":
+            # 用户明确拒绝 → verdict = fail
+            verdict = "fail"
+        else:
+            # 用户确认 → 保留 role 的原始 verdict（从 step_status 或 pending_routes 读取）
+            st = load_state(state_path)
+            original_verdict = None
+            # 从 pending_routes 读
+            pending_routes = st.get("pending_routes", {})
+            if step in pending_routes:
+                original_verdict = pending_routes[step].get("verdict")
+            # 从 step_status 读（awaiting_confirmation 中保存的）
+            if not original_verdict:
+                step_info = st.get("step_status", {}).get(step, {})
+                original_verdict = step_info.get("verdict")
+            # fallback：如果没有原始 verdict，默认 confirmed
+            verdict = original_verdict or "confirmed"
         advance_cmd = [
             "python3", "engine/scripts/set_state.py",
             "--action", "advance", "--step", step,

@@ -30,6 +30,25 @@ knowledge:
 # --------------------------------------------------------------------
 roles:
 
+  # === 迭代入口阶段（新增·v4）===
+
+  迭代守门人:
+    type: producer
+    confirm: manual
+    outputs:
+      - 迭代判定报告: outputs/迭代判定报告.json, type=process
+
+  用户反馈收集者:
+    type: standard
+    confirm: manual
+    inputs:
+      - 前端代码: outputs/src/frontend/
+      - 后端代码: outputs/src/backend/
+      - 最终裁决书: outputs/最终裁决书.md
+      - 部署指南: outputs/部署指南.md
+    outputs:
+      - 迭代需求: outputs/迭代需求.md
+
   # === 需求确认阶段 ===
 
   需求接收者:
@@ -288,6 +307,21 @@ roles:
 # --------------------------------------------------------------------
 edges:
 
+  # ===== 迭代入口（新增·v4）=====
+
+  # 迭代守门人 producer 自动展开
+  - 迭代守门人 → 迭代守门人（校验）
+
+  # 迭代守门人条件路由：全新构建 vs 增量迭代
+  - 迭代守门人（校验） → 需求接收者 when: result.verdict == "fresh_start"
+  - 迭代守门人（校验） → 用户反馈收集者 when: result.verdict == "incremental"
+
+  # 用户反馈收集者条件路由：定向回退到受影响的实现角色
+  - 用户反馈收集者 → 前端实现者 when: result.verdict == "frontend_fix"
+  - 用户反馈收集者 → 后端实现者 when: result.verdict == "backend_fix"
+  - 用户反馈收集者 → [交互逻辑设计师, 美学布局设计师] when: result.verdict == "design_fix" max_executions: 3
+  - 用户反馈收集者 → 完成 when: result.verdict == "no_change"
+
   # ===== producer 自动展开（producer → 校验角色）=====
   - 需求接收者 → 需求接收者（校验）
   - 前端实现者 → 前端实现者（校验）
@@ -349,14 +383,15 @@ edges:
   # Phase 9: 部署文档 → 终审
   - 部署文档管理者 → 综合裁决者
 
-  # Phase 10: 终审通过 → 交付
-  - 综合裁决者 → 完成 when: result.verdict == "confirmed"
+  # Phase 10: 终审通过 → 迭代守门人（闭环迭代入口，用户确认系统后可进入下一轮迭代）
+  - 综合裁决者 → 迭代守门人 when: result.verdict == "confirmed"
 
   # ===== producer 自校验 loop（局部回退 · 不设 max_executions）=====
 
   - 需求接收者（校验） → 需求接收者 when: result.verdict == "loop"
   - 前端实现者（校验） → 前端实现者 when: result.verdict == "loop"
   - 后端实现者（校验） → 后端实现者 when: result.verdict == "loop"
+  - 迭代守门人（校验） → 迭代守门人 when: result.verdict == "loop"
 
   # ===== 对抗回退边（全局回退 · 设 max_executions）=====
 

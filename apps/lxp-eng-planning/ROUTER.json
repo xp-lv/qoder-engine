@@ -1,7 +1,130 @@
 {
   "schema_version": "2.0",
-  "entry": "需求接收者",
+  "entry": "迭代守门人",
   "steps": [
+    {
+      "step": "迭代守门人",
+      "role": "迭代守门人",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "迭代守门人-validate"
+          ],
+          "type": "normal",
+          "carries": [
+            {
+              "path": "outputs/迭代守门人-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 迭代守门人"
+            }
+          ]
+        },
+        "fail": {
+          "targets": [
+            "迭代守门人"
+          ],
+          "type": "backward",
+          "carries": [
+            {
+              "path": "outputs/迭代判定报告.json",
+              "type": "feedback",
+              "name": "[反馈] 迭代判定报告"
+            },
+            {
+              "path": "outputs/迭代守门人-gate-result.json",
+              "type": "feedback",
+              "name": "[反馈] 迭代守门人 Gate校验结果"
+            },
+            {
+              "path": "outputs/迭代守门人-feedback.json",
+              "type": "feedback",
+              "name": "[反馈] 迭代守门人 用户反馈"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "用户反馈收集者",
+      "role": "用户反馈收集者",
+      "transitions": {
+        "frontend_fix": {
+          "targets": [
+            "前端实现者"
+          ],
+          "type": "normal",
+          "carries": [
+            {
+              "path": "outputs/用户反馈收集者-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 用户反馈收集者"
+            }
+          ]
+        },
+        "backend_fix": {
+          "targets": [
+            "后端实现者"
+          ],
+          "type": "normal",
+          "carries": [
+            {
+              "path": "outputs/用户反馈收集者-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 用户反馈收集者"
+            }
+          ]
+        },
+        "design_fix": {
+          "targets": [
+            "交互逻辑设计师",
+            "美学布局设计师"
+          ],
+          "type": "normal",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "outputs/用户反馈收集者-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 用户反馈收集者"
+            }
+          ]
+        },
+        "no_change": {
+          "targets": [],
+          "type": "normal",
+          "carries": [
+            {
+              "path": "outputs/用户反馈收集者-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 用户反馈收集者"
+            }
+          ]
+        },
+        "fail": {
+          "targets": [
+            "用户反馈收集者"
+          ],
+          "type": "backward",
+          "carries": [
+            {
+              "path": "outputs/迭代需求.md",
+              "type": "feedback",
+              "name": "[反馈] 迭代需求"
+            },
+            {
+              "path": "outputs/用户反馈收集者-gate-result.json",
+              "type": "feedback",
+              "name": "[反馈] 用户反馈收集者 Gate校验结果"
+            },
+            {
+              "path": "outputs/用户反馈收集者-feedback.json",
+              "type": "feedback",
+              "name": "[反馈] 用户反馈收集者 用户反馈"
+            }
+          ]
+        }
+      }
+    },
     {
       "step": "需求接收者",
       "role": "需求接收者",
@@ -1019,7 +1142,9 @@
       "role": "综合裁决者",
       "transitions": {
         "confirmed": {
-          "targets": [],
+          "targets": [
+            "迭代守门人"
+          ],
           "type": "normal",
           "carries": [
             {
@@ -1082,6 +1207,69 @@
               "path": "outputs/综合裁决者-feedback.json",
               "type": "feedback",
               "name": "[反馈] 综合裁决者 用户反馈"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "迭代守门人-validate",
+      "role": "迭代守门人（校验）",
+      "transitions": {
+        "fresh_start": {
+          "targets": [
+            "需求接收者"
+          ],
+          "type": "normal",
+          "carries": [
+            {
+              "path": "outputs/迭代守门人-validate-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 迭代守门人-validate"
+            }
+          ]
+        },
+        "incremental": {
+          "targets": [
+            "用户反馈收集者"
+          ],
+          "type": "normal",
+          "carries": [
+            {
+              "path": "outputs/迭代守门人-validate-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 迭代守门人-validate"
+            }
+          ]
+        },
+        "loop": {
+          "targets": [
+            "迭代守门人"
+          ],
+          "type": "normal",
+          "carries": [
+            {
+              "path": "outputs/迭代守门人-validate-gate-result.json",
+              "type": "deliverable",
+              "name": "[上游Gate结果] 迭代守门人-validate"
+            }
+          ]
+        },
+        "fail": {
+          "targets": [
+            "迭代守门人-validate"
+          ],
+          "type": "backward",
+          "carries": [
+            {
+              "path": "outputs/迭代守门人-validation.json",
+              "type": "feedback",
+              "name": "[反馈] 迭代守门人校验报告"
+            },
+            {
+              "path": "outputs/迭代守门人-validate-gate-result.json",
+              "type": "feedback",
+              "name": "[反馈] 迭代守门人-validate Gate校验结果"
             }
           ]
         }
