@@ -564,7 +564,7 @@ def cmd_list_workspaces(args):
     # v7.2: 优先从 index.json 读取
     try:
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-        from workspace_index import list_all
+        from workspace_index import list_all, to_local_display
         idx = list_all()
         active = idx.get("active_workspace")
         result = []
@@ -577,7 +577,7 @@ def cmd_list_workspaces(args):
                 "terminal": info.get("terminal_state"),
                 "schema_version": info.get("schema_version", "?"),
                 "has_snapshots": info.get("has_snapshots", False),
-                "last_active_at": info.get("last_active_at", "?"),
+                "last_active_at": to_local_display(info.get("last_active_at", "?")),
                 "is_active": ws_id == active,
             })
         print(json.dumps({"workspaces": result, "active": active}, ensure_ascii=False, indent=2))

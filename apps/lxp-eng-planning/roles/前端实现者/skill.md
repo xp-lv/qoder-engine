@@ -11,26 +11,26 @@
 1. **读取输入**：读取 dispatch 注入的输入文件（交互逻辑设计文档 + 美学布局设计文档 + 接口翻译文档 + 合并校验报告[可选] + 联调验证报告[可选]）
 2. **参考知识文档**：参考 dispatch 注入的 knowledge 文档（前端拖拽交互最佳实践 + 精力管理领域知识 + 全栈启动验证最佳实践）
 3. **按设计文档生成前端代码**：
-   - **F1 树状视图**：按交互逻辑设计文档的状态机和美学布局设计文档的视觉规格实现
-   - **F2 拖拽编排**：按前端拖拽交互最佳实践知识文档实现拖拽逻辑（dragstart/dragover/drop）
-   - **F3 每日清单**：按交互流程和接口翻译文档的 API 调用实现
-   - **F4 周视图**：按预算展示逻辑和 API 契约实现
+ - **F1 树状视图**：按交互逻辑设计文档的状态机和美学布局设计文档的视觉规格实现
+ - **F2 拖拽编排**：按前端拖拽交互最佳实践知识文档实现拖拽逻辑（dragstart/dragover/drop）
+ - **F3 每日清单**：按交互流程和接口翻译文档的 API 调用实现
+ - **F4 周视图**：按预算展示逻辑和 API 契约实现
 4. **技术栈**：
-   - React + TypeScript
-   - 状态管理（Context/hooks 或轻量 Store）
-   - 样式（Tailwind CSS 或 CSS Modules）
-   - API 调用（fetch/axios，遵循接口翻译文档的契约）
+ - React + TypeScript
+ - 状态管理（Context/hooks 或轻量 Store）
+ - 样式（Tailwind CSS 或 CSS Modules）
+ - API 调用（fetch/axios，遵循接口翻译文档的契约）
 5. **运行时就绪性要求（新增）**：
-   - **package.json**：必须包含 `dev`、`build` 两个脚本
-   - **tsconfig.json**：必须启用 `strict: true` 模式
-   - **环境变量配置**：API base URL 通过环境变量 `VITE_API_BASE_URL` 配置
-   - **Vite proxy**：vite.config.ts 配置 proxy 将 `/api` 请求转发到后端地址
-   - **Error Boundary**：实现全局 Error Boundary，后端返回错误时前端不白屏
+ - **package.json**：必须包含 `dev`、`build` 两个脚本
+ - **tsconfig.json**：必须启用 `strict: true` 模式
+ - **环境变量配置**：API base URL 通过环境变量 `VITE_API_BASE_URL` 配置
+ - **Vite proxy**：vite.config.ts 配置 proxy 将 `/api` 请求转发到后端地址
+ - **Error Boundary**：实现全局 Error Boundary，后端返回错误时前端不白屏
 6. **代码质量要求**：
-   - TypeScript 严格模式，无 any 类型
-   - 组件按交互逻辑设计师的通信协议组织
-   - 视觉遵循美学布局设计师的配色/字体/间距规范
-   - API 调用遵循接口翻译师的契约定义
+ - TypeScript 严格模式，无 any 类型
+ - 组件按交互逻辑设计师的通信协议组织
+ - 视觉遵循美学布局设计师的配色/字体/间距规范
+ - API 调用遵循接口翻译师的契约定义
 7. **写入产出物**：将前端代码写入 dispatch 注入的产出物路径
 
 ## 设计约束
@@ -48,7 +48,7 @@
 - 校验角色 confirmed → 流转至预览部署者 → 前端美学师 → confirmed → 全栈联调验证者（与后端启动验证者同步汇入）
 - 校验角色 loop → 回退至本角色重新生成
 
-> producer 自校验 loop 边不设 max_executions（局部回退不消耗全局配额）。
+> 所有回退边不设 max_executions，由主AGENT上下文感知兜底死循环。
 > 合并校验者 FRONTEND_BLOCKING 回退 max:5，充分支持前端多轮迭代。
 > 全栈联调验证者 FRONTEND_BLOCKING 回退 max:3。
 > 前端美学师 needs_revision 回退 max:3，用户预览不满意时打回前端设计组重新设计。

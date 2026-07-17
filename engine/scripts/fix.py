@@ -122,9 +122,35 @@ def _do_jump(state_path, target_step):
         st.clear()
         st.update(snapshot)
 
+        # v7.3: 恢复并行兄弟分支
+        # 快照中 step_status/active_dispatches 含有 jump 时刻正在执行的兄弟分支
+        # 时间回退后没有实际 agent 在跑，需将它们的 dispatch 指令转入 pending_dispatches 重新分发
+        snap_ss = st.get("step_status", {})
+        snap_active = st.get("active_dispatches", {})
+
+        sibling_dispatches = []
+        for step_name, entry in snap_ss.items():
+            if step_name == target_step:
+                continue
+            if entry.get("status") == "executing" and step_name in snap_active:
+                sibling_dispatches.append(snap_active[step_name])
+
+        if sibling_dispatches:
+            existing_pd = st.get("pending_dispatches") or []
+            st["pending_dispatches"] = existing_pd + sibling_dispatches
+            sibling_names = [d.get("step", "?") for d in sibling_dispatches]
+            print(
+                f"[fix v7.3] jump to {target_step}: "
+                f"restored {len(sibling_dispatches)} sibling branch(es): {sibling_names}",
+                file=sys.stderr,
+            )
+
+        # 清除僵尸 step_status 和 active_dispatches（已转入 pending_dispatches 或无需恢复）
+        st["step_status"] = {}
+        st["active_dispatches"] = {}
     cleared_count = len(completed_check) - len(snapshot.get("completed", {}))
     print(
-        f"[fix v7.0] jump to {target_step}: "
+        f"[fix v7.3] jump to {target_step}: "
         f"restored snapshot (cleared {cleared_count} downstream checkpoints)",
         file=sys.stderr,
     )

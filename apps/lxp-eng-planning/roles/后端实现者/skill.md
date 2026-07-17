@@ -11,30 +11,30 @@
 1. **读取输入**：读取 dispatch 注入的输入文件（后端架构设计文档 + 数据库设计文档 + API详细设计文档 + 合并校验报告[可选] + 后端启动验证报告[可选] + 联调验证报告[可选]）
 2. **参考知识文档**：参考 dispatch 注入的 knowledge 文档（树形数据结构存储优化 + 全栈启动验证最佳实践）
 3. **按设计文档生成后端代码**：
-   - **路由层**：按 API 契约设计师的 RESTful 路由定义实现
-   - **控制器层**：按 API 设计的请求处理和参数校验实现
-   - **服务层**：按后端业务逻辑文档的业务规则实现
-   - **数据层**：按数据模型设计师的 Prisma Schema 实现数据操作
-   - **中间件**：按后端架构设计师的中间件配置实现
+ - **路由层**：按 API 契约设计师的 RESTful 路由定义实现
+ - **控制器层**：按 API 设计的请求处理和参数校验实现
+ - **服务层**：按后端业务逻辑文档的业务规则实现
+ - **数据层**：按数据模型设计师的 Prisma Schema 实现数据操作
+ - **中间件**：按后端架构设计师的中间件配置实现
 4. **生成数据库 Schema**：
-   - 按数据模型设计师的 Prisma Schema 草案生成完整的 schema.prisma
-   - 包含 Task/EnergyLabel/Budget 三表定义
-   - 邻接表方案（parentId 自引用）
-   - 索引定义
+ - 按数据模型设计师的 Prisma Schema 草案生成完整的 schema.prisma
+ - 包含 Task/EnergyLabel/Budget 三表定义
+ - 邻接表方案（parentId 自引用）
+ - 索引定义
 5. **生成部署配置**：
-   - docker-compose.yml（Node.js + SQLite）
-   - 按后端架构设计师的部署拓扑实现
+ - docker-compose.yml（Node.js + SQLite）
+ - 按后端架构设计师的部署拓扑实现
 6. **运行时就绪性要求（新增）**：
-   - **package.json**：必须包含 `dev`、`build`、`start` 三个脚本
-   - **tsconfig.json**：必须启用 `strict: true` 模式
-   - **CORS 配置**：必须配置 CORS 允许前端域（如 `http://localhost:5173`）
-   - **健康检查端点**：必须实现 `GET /api/health` 端点，返回 200 + `{ "status": "ok" }`
-   - **环境变量**：DATABASE_URL 等配置通过 .env 文件管理
+ - **package.json**：必须包含 `dev`、`build`、`start` 三个脚本
+ - **tsconfig.json**：必须启用 `strict: true` 模式
+ - **CORS 配置**：必须配置 CORS 允许前端域（如 `http://localhost:5173`）
+ - **健康检查端点**：必须实现 `GET /api/health` 端点，返回 200 + `{ "status": "ok" }`
+ - **环境变量**：DATABASE_URL 等配置通过 .env 文件管理
 7. **代码质量要求**：
-   - TypeScript 严格模式
-   - 分层架构遵循后端架构设计师设计
-   - API 实现遵循 API 契约设计师定义
-   - 数据模型遵循数据模型设计师设计
+ - TypeScript 严格模式
+ - 分层架构遵循后端架构设计师设计
+ - API 实现遵循 API 契约设计师定义
+ - 数据模型遵循数据模型设计师设计
 8. **写入产出物**：将后端代码、数据库 Schema、部署配置写入 dispatch 注入的产出物路径
 
 ## 设计约束
@@ -52,7 +52,7 @@
 - 校验角色 confirmed → 流转至后端启动验证者（运行时验证）
 - 校验角色 loop → 回退至本角色重新生成
 
-> producer 自校验 loop 边不设 max_executions。
+> 所有回退边不设 max_executions，由主AGENT上下文感知兜底死循环。
 > 后端启动验证者 BACKEND_BLOCKING 回退 max:3。
 > 全栈联调验证者 BACKEND_BLOCKING 回退 max:3。
 > 合并校验者 BACKEND_BLOCKING 回退 max:3。

@@ -576,6 +576,7 @@ def phase_post_execute(state_path, app_path, workspace_id, results_json):
                     "python3", "engine/scripts/set_state.py",
                     "--action", "set_status", "--step", step,
                     "--status", "awaiting_confirmation",
+                    "--verdict", effective_verdict,
                     "--state-path", state_path,
                 ]
                 run_script(set_cmd)

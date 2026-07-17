@@ -12,7 +12,9 @@
         "verdict": {
           "type": "string",
           "enum": [
-            "confirmed"
+            "done",
+            "fresh_start",
+            "incremental"
           ]
         },
         "summary": {
@@ -29,12 +31,5 @@
   },
   "required": [
     "result"
-  ],
-  "_required_files": [
-    {
-      "name": "迭代判定报告",
-      "path": "outputs/迭代判定报告.json",
-      "type": "process"
-    }
   ]
 }

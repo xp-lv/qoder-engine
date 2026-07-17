@@ -3,12 +3,12 @@
     "role_name": "迭代守门人",
     "skill_path": "roles/迭代守门人/skill.md",
     "blocking_mode": "manual",
-    "role_type": "producer",
+    "role_type": "standard",
     "outputs": [
       {
-        "name": "迭代判定报告",
-        "path": "outputs/迭代判定报告.json",
-        "type": "process"
+        "name": "迭代守门人",
+        "path": "outputs/迭代守门人/迭代守门人.json",
+        "type": "deliverable"
       }
     ],
     "gate_rules": {
@@ -25,136 +25,18 @@
         "enabled": false
       }
     },
-    "principles": "roles/迭代守门人/principles.md",
     "input_groups": [
       [
         "综合裁决者"
       ],
       [
-        "迭代守门人-validate"
-      ],
-      [
         "迭代守门人"
       ]
     ],
     "verdicts": [
-      "confirmed"
-    ]
-  },
-  {
-    "role_name": "迭代守门人（校验）",
-    "skill_path": "roles/迭代守门人_校验_/skill.md",
-    "blocking_mode": "auto",
-    "role_type": "standard",
-    "outputs": [
-      {
-        "name": "迭代守门人校验报告",
-        "path": "outputs/迭代守门人-validation.json",
-        "type": "deliverable"
-      }
-    ],
-    "inputs": [
-      {
-        "name": "迭代判定报告",
-        "path": "outputs/迭代判定报告.json",
-        "type": "process"
-      }
-    ],
-    "gate_rules": {
-      "phase1_cross_validation": {
-        "enabled": true,
-        "rules": [
-          {
-            "type": "field_exists",
-            "field": "result.verdict",
-            "must_be_non_empty": true,
-            "description": "校验角色必须输出 result.verdict"
-          }
-        ]
-      },
-      "phase2_schema_comparison": {
-        "enabled": false
-      },
-      "phase3_anomaly_detection": {
-        "enabled": false
-      }
-    },
-    "principles": "roles/迭代守门人/principles.md",
-    "input_groups": [
-      [
-        "迭代守门人"
-      ],
-      [
-        "迭代守门人-validate"
-      ]
-    ],
-    "verdicts": [
+      "done",
       "fresh_start",
-      "incremental",
-      "loop"
-    ]
-  },
-  {
-    "role_name": "用户反馈收集者",
-    "skill_path": "roles/用户反馈收集者/skill.md",
-    "blocking_mode": "manual",
-    "role_type": "standard",
-    "outputs": [
-      {
-        "name": "迭代需求",
-        "path": "outputs/迭代需求.md",
-        "type": "deliverable"
-      }
-    ],
-    "gate_rules": {
-      "phase1_cross_validation": {
-        "enabled": true,
-        "text_validation": {
-          "min_size": 50
-        }
-      },
-      "phase2_schema_comparison": {
-        "enabled": false
-      },
-      "phase3_anomaly_detection": {
-        "enabled": false
-      }
-    },
-    "inputs": [
-      {
-        "name": "前端代码",
-        "path": "outputs/src/frontend/",
-        "type": "deliverable"
-      },
-      {
-        "name": "后端代码",
-        "path": "outputs/src/backend/",
-        "type": "deliverable"
-      },
-      {
-        "name": "最终裁决书",
-        "path": "outputs/最终裁决书.md",
-        "type": "deliverable"
-      },
-      {
-        "name": "部署指南",
-        "path": "outputs/部署指南.md",
-        "type": "deliverable"
-      }
-    ],
-    "input_groups": [
-      [
-        "迭代守门人-validate"
-      ],
-      [
-        "用户反馈收集者"
-      ]
-    ],
-    "verdicts": [
-      "backend_fix",
-      "design_fix",
-      "frontend_fix",
-      "no_change"
+      "incremental"
     ]
   },
   {
@@ -186,7 +68,7 @@
     "principles": "roles/需求接收者/principles.md",
     "input_groups": [
       [
-        "迭代守门人-validate"
+        "迭代守门人"
       ],
       [
         "需求接收者-validate"
@@ -353,6 +235,9 @@
         "需求审计者"
       ],
       [
+        "综合裁决者"
+      ],
+      [
         "需求分流者"
       ]
     ],
@@ -427,6 +312,9 @@
       ],
       [
         "交叉审核者"
+      ],
+      [
+        "综合裁决者"
       ],
       [
         "前端文档管理者"
@@ -505,6 +393,9 @@
         "交叉审核者"
       ],
       [
+        "综合裁决者"
+      ],
+      [
         "后端文档管理者"
       ]
     ],
@@ -571,9 +462,6 @@
         "后端文档管理者"
       ],
       [
-        "综合裁决者"
-      ],
-      [
         "交叉审核者"
       ]
     ],
@@ -627,11 +515,6 @@
         "type": "process"
       },
       {
-        "name": "前端美学评审报告",
-        "path": "outputs/前端美学评审报告.json",
-        "type": "process"
-      },
-      {
         "name": "前端拖拽交互最佳实践",
         "path": "knowledge/前端拖拽交互最佳实践.md",
         "type": "knowledge"
@@ -644,13 +527,10 @@
     ],
     "input_groups": [
       [
-        "用户反馈收集者"
-      ],
-      [
         "交叉审核者"
       ],
       [
-        "前端美学师"
+        "全栈联调验证者"
       ],
       [
         "交互逻辑设计师"
@@ -703,11 +583,6 @@
         "type": "process"
       },
       {
-        "name": "前端美学评审报告",
-        "path": "outputs/前端美学评审报告.json",
-        "type": "process"
-      },
-      {
         "name": "前端拖拽交互最佳实践",
         "path": "knowledge/前端拖拽交互最佳实践.md",
         "type": "knowledge"
@@ -715,13 +590,10 @@
     ],
     "input_groups": [
       [
-        "用户反馈收集者"
-      ],
-      [
         "交叉审核者"
       ],
       [
-        "前端美学师"
+        "全栈联调验证者"
       ],
       [
         "美学布局设计师"
@@ -1042,9 +914,6 @@
     "principles": "roles/前端实现者/principles.md",
     "input_groups": [
       [
-        "用户反馈收集者"
-      ],
-      [
         "交互逻辑设计师",
         "美学布局设计师",
         "接口翻译师"
@@ -1189,9 +1058,6 @@
     "principles": "roles/后端实现者/principles.md",
     "input_groups": [
       [
-        "用户反馈收集者"
-      ],
-      [
         "后端架构设计师",
         "数据模型设计师",
         "API契约设计师"
@@ -1281,7 +1147,7 @@
   {
     "role_name": "预览部署者",
     "skill_path": "roles/预览部署者/skill.md",
-    "blocking_mode": "manual",
+    "blocking_mode": "auto",
     "role_type": "standard",
     "outputs": [
       {
@@ -1321,66 +1187,11 @@
         "前端实现者-validate"
       ],
       [
-        "前端美学师"
-      ],
-      [
         "预览部署者"
       ]
     ],
     "verdicts": [
       "confirmed"
-    ]
-  },
-  {
-    "role_name": "前端美学师",
-    "skill_path": "roles/前端美学师/skill.md",
-    "blocking_mode": "manual",
-    "role_type": "standard",
-    "outputs": [
-      {
-        "name": "前端美学评审报告",
-        "path": "outputs/前端美学评审报告.json",
-        "type": "process"
-      }
-    ],
-    "gate_rules": {
-      "phase1_cross_validation": {
-        "enabled": true,
-        "text_validation": {
-          "min_size": 50
-        }
-      },
-      "phase2_schema_comparison": {
-        "enabled": false
-      },
-      "phase3_anomaly_detection": {
-        "enabled": false
-      }
-    },
-    "inputs": [
-      {
-        "name": "预览部署报告",
-        "path": "outputs/预览部署报告.json",
-        "type": "process"
-      },
-      {
-        "name": "预览截图",
-        "path": "outputs/preview-screenshot.png",
-        "type": "process"
-      }
-    ],
-    "input_groups": [
-      [
-        "预览部署者"
-      ],
-      [
-        "前端美学师"
-      ]
-    ],
-    "verdicts": [
-      "confirmed",
-      "needs_revision",
-      "service_down"
     ]
   },
   {
@@ -1447,7 +1258,7 @@
   {
     "role_name": "全栈联调验证者",
     "skill_path": "roles/全栈联调验证者/skill.md",
-    "blocking_mode": "auto",
+    "blocking_mode": "manual",
     "role_type": "standard",
     "outputs": [
       {
@@ -1504,7 +1315,12 @@
     ],
     "input_groups": [
       [
-        "前端美学师",
+        "迭代守门人"
+      ],
+      [
+        "预览部署者"
+      ],
+      [
         "后端启动验证者"
       ],
       [
@@ -1514,7 +1330,8 @@
     "verdicts": [
       "BACKEND_BLOCKING",
       "FRONTEND_BLOCKING",
-      "confirmed"
+      "confirmed",
+      "design_fix"
     ]
   },
   {
@@ -1776,7 +1593,8 @@
     "verdicts": [
       "challenged",
       "confirmed",
-      "deploy_doc_defect"
+      "deploy_doc_defect",
+      "doc_challenged"
     ]
   }
 ]
