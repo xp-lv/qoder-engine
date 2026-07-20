@@ -26,6 +26,22 @@ def output(data):
     print(json.dumps(data, ensure_ascii=False))
     sys.exit(0 if data.get("status") == "success" else 1)
 
+# v9.2: JOIN 检查辅助函数——基于边方向判断前驱是否有效指向 target
+def _source_points_to_target(src_step, src_verdict, target, steps_map):
+    """检查 src_step 的当前 verdict 对应的边是否指向 target。
+
+    核心思路：JOIN 的有效前驱不只是"在 completed 中"，而是
+    "其当前 verdict 对应的边确实指向 JOIN 目标"。
+    如果前驱给了其他 verdict（走了别的边），不算有效前驱。
+    """
+    src_def = steps_map.get(src_step, {})
+    transitions = src_def.get("transitions", {})
+    edge = transitions.get(src_verdict, {})
+    if isinstance(edge, dict):
+        targets = edge.get("targets", [])
+        return target in targets
+    return False
+
 def load_json(path, error_code, error_msg):
     if not os.path.exists(path):
         output({"status": "failure", "error_code": error_code, "message": f"{error_msg}: {path}", "dispatch_instructions": []})
@@ -61,8 +77,9 @@ def main():
     steps_map = {s["step"]: s for s in steps}
     registry_map = {r["role_name"]: r for r in registry}
     executing = set(state.get("step_status", {}).keys())
-    # v4.1: 读 completed（持久权威源）
-    finished = set(state.get("completed", {}).keys())
+    # v9.2: completed_raw 用于 JOIN 检查时读取 verdict；finished 用于初始调度判断
+    completed_raw = state.get("completed", {})
+    finished = set(completed_raw.keys())
     user_request = state.get("metadata", {}).get("user_request", "") or args.task_request
 
     # ─── 确定候选目标 STEP ───
@@ -131,16 +148,38 @@ def main():
         if target in executing:
             continue
 
-        # v9.1 per-target JOIN 检查：非 backward、非初始调度时，检查目标的前置依赖是否全部完成
-        # 规则：input_groups 为空/不存在 → 无前置依赖 → 放行；
-        #       任一组的全部来源都在 completed 中 → 放行；否则 → 跳过（等待 JOIN）
+        # v9.2 per-target JOIN 检查（基于边方向）：
+        # 非 backward、非初始调度时，检查目标的前置依赖是否全部"有效指向" target。
+        # 有效 = 在 completed 中 + 不在 executing 中 + 当前 verdict 的边指向 target。
+        # 这解决了"并行角色给出不同 verdict"场景：走了其他边的 step 不算 JOIN 有效前驱。
         # 注：JOIN 检查放在 max_executions 递增之前，避免 JOIN 未满足时重复递增计数。
         if not is_backward and not is_initial_dispatch:
             target_def = steps_map.get(target, {})
             target_role = target_def.get("role", "")
             groups = role_input_groups.get(target_role, [])
-            if groups and not any(set(g).issubset(finished) for g in groups):
-                continue  # 前驱未齐，等待 JOIN（不递增 edge_counts）
+            if groups:
+                satisfied = False
+                for group in groups:
+                    all_valid = True
+                    for src in group:
+                        # 不在 completed → 无效
+                        if src not in completed_raw:
+                            all_valid = False
+                            break
+                        # 正在 executing（重新执行中）→ 无效
+                        if src in executing:
+                            all_valid = False
+                            break
+                        # 当前 verdict 的边不指向 target → 无效（走了别的边）
+                        src_verdict = completed_raw[src].get("verdict", "confirmed")
+                        if not _source_points_to_target(src, src_verdict, target, steps_map):
+                            all_valid = False
+                            break
+                    if all_valid:
+                        satisfied = True
+                        break
+                if not satisfied:
+                    continue  # JOIN 不满足，等待（不递增 edge_counts）
 
         # 边级 max_executions 检查 + 递增（normal 和 backward 边均检查）
         if not is_initial_dispatch:
