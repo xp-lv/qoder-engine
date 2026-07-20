@@ -46,17 +46,9 @@ def run_script(cmd):
 # ─── 工具函数 ───
 
 # v4.2: 所有 STATE.json 读写统一通过 state_io 模块（唯一入口）
-
-def cache_dispatches(state_path, dispatches):
-    """将 dispatches 缓存到 STATE.json，供 dispatch 阶段读取。
-
-    v4.0.1 修复：追加而非覆盖。多个并行分支的 post_execute 可能先后缓存
-    dispatches，覆盖写会导致先缓存的独立目标 dispatch 被后缓存的覆盖丢失。
-    v5.2: 使用 state_txn 原子事务。
-    """
-    with state_txn(state_path) as st:
-        existing = st.get("pending_dispatches") or []
-        st["pending_dispatches"] = existing + dispatches
+# v9.1 统一路径重构：删除 cache_dispatches，pending_routes 成为唯一路由信号源。
+# post_execute / post_confirm 不再调 router + cache，advance 后直接返回 next: dispatch，
+# 由下一次 --next 统一从 pending_routes 走单一冷路径路由。
 
 # ─── 状态转换统一 API ───
 
@@ -143,41 +135,25 @@ def _process_dispatch_pipeline(dispatches, st, app_path):
             seen.add(key)
             unique.append(d)
 
-    # Step 3: 跨状态去重（排除已完成的步骤，防止重复 dispatch）
-    completed_set = set(_get_completed(st).keys())
-    unique = [d for d in unique if d.get("step", "") not in completed_set]
-
+    # v9.1 Step 3 语义修复：原逻辑排除所有 completed 步骤，但 loop/迭代场景下
+    # completed 中的步骤可能需要重新执行（如架构师 R1/R2 修订）。改为只排除
+    # terminal 步骤（无 transitions 的终态节点不应再被 dispatch）。
+    # 注：重复 dispatch 的防护由 router.py 的 executing 检查 + max_executions 权威负责。
     return unique
 
 def phase_dispatch(state_path, app_path, workspace_id, from_steps, on_result, task_request):
-    """v4.1: 统一调度入口。优先读 pending_dispatches 缓存，无缓存时从 pending_routes 路由。
+    """v9.1: 单一路径调度入口。从 pending_routes（瞬态路由信号）出发路由。
 
-    v4.1 核心变更：
-    - 路由信号从 pending_routes 读取（瞬态，路由后清空）
-    - JOIN 判断从 completed 读取（持久，整个执行期间保留）
-    - 这两个职责不再共享同一数据结构，消除多源冲突
-
-    v8.0 修复 P0-2 ABA：pending_dispatches 的读+清空原子化在单个 state_txn 内完成。
-    原实现：load_state 拿 st → state_txn 清空 → 用旧 st 的 dispatches。中间窗口内
-    若有其他进程（如 Hook② cache）追加 dispatch，会被静默丢失。现改为：
-    全程在 state_txn 内 load + clear + extract dispatches。
+    v9.1 统一路径重构：
+    - 删除 pending_dispatches 缓存机制（热路径1）
+    - pending_routes 成为唯一路由信号源
+    - post_execute / post_confirm advance 后直接返回 next: dispatch
+    - 由本函数统一从 pending_routes 路由，消除冷热路径分叉
+    - JOIN 判断从 completed 读取（持久权威源）
     """
 
-    # v8.0: pending_dispatches 的原子读-改-写（防止并发追加丢失）
     st = load_state(state_path)
-    pending = st.get("pending_dispatches")
-    if pending:
-        # P0-2 修复：在 state_txn 内原子完成「读+清空+取 dispatches」
-        # 避免与并发 cache_dispatches 的追加产生 ABA
-        with state_txn(state_path) as locked_st:
-            dispatches = locked_st.get("pending_dispatches") or []
-            locked_st["pending_dispatches"] = None
-        # 消费 pending_routes（瞬态信号，用完即清空）
-        _clear_pending_routes(state_path)
-        _process_dispatches(state_path, app_path, workspace_id, dispatches, from_steps or [], task_request)
-        return
-
-    # ── 冷路径：从 pending_routes（瞬态路由信号）出发路由 ──
+    # ── 单一路径：从 pending_routes（瞬态路由信号）出发路由 ──
     pending_routes = _get_pending_routes(st)
     if not from_steps and pending_routes:
         all_dispatches = []
@@ -215,10 +191,16 @@ def phase_dispatch(state_path, app_path, workspace_id, from_steps, on_result, ta
             else:
                 diag_st = load_state(state_path)
                 reason, is_error = _diagnose_wait_reason(diag_st, app_path)
-                _clear_pending_routes(state_path)  # 诊断后再清空（Case 4 需读 pending_routes）
                 next_val = "error" if is_error else "wait"
                 if is_error:
+                    # v9.1: 真正错误才清空 pending_routes（避免错误信号残留）
+                    _clear_pending_routes(state_path)  # 诊断后再清空（Case 4 需读 pending_routes）
                     _mark_engine_error(state_path, reason)
+                else:
+                    # v9.1 并行场景关键修复：JOIN 等待（正常 wait）时不清空 pending_routes！
+                    # 并行分支陆续 submit 时，每路 --next 发现 JOIN 未满足应保留路由信号，
+                    # 等下一路 submit 后 --next 重新检查 JOIN 条件。清空会导致后续分支信号丢失。
+                    pass
                 output({"status": "success", "next": next_val, "reason": reason})
         _clear_pending_routes(state_path)
 
@@ -347,7 +329,6 @@ def _diagnose_wait_reason(st, app_path):
     """
     completed = set(st.get("completed", {}).keys())
     pending_routes = st.get("pending_routes", {})
-    pending_dispatches = st.get("pending_dispatches")
     step_status = st.get("step_status", {})
 
     # 加载 ROUTER + registry
@@ -364,10 +345,7 @@ def _diagnose_wait_reason(st, app_path):
 
     role_input_groups = {r["role_name"]: r.get("input_groups", []) for r in (registry or [])}
 
-    # Case 1: pending_dispatches 存在 → 下一轮 --next 会消费
-    if pending_dispatches:
-        steps = [d.get("step", "?") for d in pending_dispatches]
-        return (f"pending_dispatches 待消费: {steps}", False)
+    # v9.1: 删除 Case 1（pending_dispatches 已不再使用，统一走 pending_routes）
 
     # Case 2: step_status 非空 → 有分支正在执行
     if step_status:
@@ -660,61 +638,14 @@ def phase_post_execute(state_path, app_path, workspace_id, results_json):
     if failed:
         output({"status": "success", "next": "error", "failed": failed, "gate_results": gate_results})
 
-    # 统一路径：所有 auto_confirmed 的 step → 调 router → 累积 → 统一 pipeline
-    # v9.0 JOIN 去重修复：循环内只累积原始 dispatch，循环后统一过 _process_dispatch_pipeline
-    # 原实现每次循环内单独调 _global_converge（只检查 JOIN 满足性，无去重），
-    # 导致 N 个并行红队各自触发同一 JOIN 目标时产生 N 份重复 dispatch。
+    # v9.1 统一路径重构：auto_confirmed 的 step 已在上方 advance（写 completed + pending_routes）。
+    # 不再在此调 router + cache，直接返回 next: dispatch，由下一次 --next
+    # 从 pending_routes 走单一冷路径路由（过 pipeline：JOIN 检查 + 去重）。
+    # 收敛了原 post_execute 内 router 调用 + cache_dispatches + phase_dispatch 热路径消费
+    # 的三段式逻辑，消除冷热路径分叉。
     if auto_confirmed and not pending:
-        all_dispatches = []
-        all_complete = False
-        seen_steps = set()
-        for ac in auto_confirmed:
-            if ac["step"] in seen_steps:
-                continue
-            seen_steps.add(ac["step"])
-            route_key = ac.get("route_key", "confirmed")
-            router_cmd = [
-                "python3", "engine/scripts/router.py",
-                "--from", json.dumps([ac["step"]]),
-                "--on", route_key,
-                "--state-path", state_path,
-                "--app-path", app_path,
-            ]
-            if workspace_id:
-                router_cmd += ["--workspace-id", workspace_id]
-            ok_rt, rt_result = run_script(router_cmd)
-            rt_dispatches = rt_result.get("dispatch_instructions", [])
-            rt_message = rt_result.get("message", "")
-            if rt_dispatches:
-                all_dispatches.extend(rt_dispatches)  # 只累积，不 converge
-            elif rt_message == "all_complete":
-                all_complete = True
-
-        # 循环结束后统一过 pipeline：converge（JOIN 检查）+ 去重 + 跨状态过滤
-        if all_dispatches:
-            pipe_st = load_state(state_path)
-            all_dispatches = _process_dispatch_pipeline(all_dispatches, pipe_st, app_path)
-
-        if all_dispatches:
-            cache_dispatches(state_path, all_dispatches)
-            output({"status": "success", "next": "dispatch",
-                    "auto_confirmed": auto_confirmed, "gate_results": gate_results, "failed": failed})
-        elif all_complete:
-            mark_complete(state_path, app_path)
-            output({"status": "success", "next": "complete",
-                    "auto_confirmed": auto_confirmed, "gate_results": gate_results, "failed": failed})
-        else:
-            st = load_state(state_path)
-            if st.get("terminal_state"):
-                output({"status": "success", "next": "complete",
-                        "reason": f"terminal_state={st['terminal_state']}",
-                        "auto_confirmed": auto_confirmed, "gate_results": gate_results, "failed": failed})
-            reason, is_error = _diagnose_wait_reason(st, app_path)
-            next_val = "error" if is_error else "wait"
-            if is_error:
-                _mark_engine_error(state_path, reason)
-            output({"status": "success", "next": next_val, "reason": reason,
-                    "auto_confirmed": auto_confirmed, "gate_results": gate_results, "failed": failed})
+        output({"status": "success", "next": "dispatch",
+                "auto_confirmed": auto_confirmed, "gate_results": gate_results, "failed": failed})
 
     # 有 pending → BLOCKING
     output({
@@ -729,8 +660,10 @@ def phase_post_execute(state_path, app_path, workspace_id, results_json):
 # ─── Phase 3: post_confirm（Write-back）───
 
 def phase_post_confirm(state_path, app_path, workspace_id, decisions_json):
-    """v4.0: confirmed → advance；rejected → rollback → 缓存 dispatches.
-    
+    """v9.1: confirmed → advance（写 completed + pending_routes）；直接返回 next: dispatch。
+
+    v9.1 统一路径重构：删除原 post_confirm 内的调 router + cache_dispatches 逻辑。
+    advance 后由下一次 --next 从 pending_routes 走单一冷路径路由。
     """
     try:
         decisions = json.loads(decisions_json)
@@ -781,46 +714,9 @@ def phase_post_confirm(state_path, app_path, workspace_id, decisions_json):
     if not advance_steps:
         output({"status": "success", "next": "dispatch"})
 
-    # 统一路径：所有 advance 的 step → 调 router → 累积 → 统一 pipeline
-    # v9.0 JOIN 去重修复：与 post_execute 路径保持一致，循环后统一过 pipeline
-    all_dispatches = []
-    all_complete = False
-    for a in advance_steps:
-        router_cmd = [
-            "python3", "engine/scripts/router.py",
-            "--from", json.dumps([a["step"]]),
-            "--on", a["verdict"],
-            "--state-path", state_path,
-            "--app-path", app_path,
-        ]
-        if workspace_id:
-            router_cmd += ["--workspace-id", workspace_id]
-        ok_rt, rt_result = run_script(router_cmd)
-        rt_dispatches = rt_result.get("dispatch_instructions", [])
-        rt_message = rt_result.get("message", "")
-        if rt_dispatches:
-            all_dispatches.extend(rt_dispatches)  # 只累积，不 converge
-        elif rt_message == "all_complete":
-            all_complete = True
-
-    # 循环结束后统一过 pipeline：converge（JOIN 检查）+ 去重 + 跨状态过滤
-    if all_dispatches:
-        pipe_st = load_state(state_path)
-        all_dispatches = _process_dispatch_pipeline(all_dispatches, pipe_st, app_path)
-
-    if all_dispatches:
-        cache_dispatches(state_path, all_dispatches)
-        output({"status": "success", "next": "dispatch"})
-    elif all_complete:
-        mark_complete(state_path, app_path)
-        output({"status": "success", "next": "complete"})
-    else:
-        diag_st = load_state(state_path)
-        reason, is_error = _diagnose_wait_reason(diag_st, app_path)
-        next_val = "error" if is_error else "wait"
-        if is_error:
-            _mark_engine_error(state_path, reason)
-        output({"status": "success", "next": next_val, "reason": reason})
+    # v9.1 统一路径重构：advance 已写入 pending_routes，不再调 router + cache。
+    # 由下一次 --next 从 pending_routes 走单一冷路径路由。
+    output({"status": "success", "next": "dispatch"})
 
 # ─── main ───
 

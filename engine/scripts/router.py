@@ -112,18 +112,35 @@ def main():
                 is_backward = True
                 break
 
-    # ─── 过滤：边级计数检查 + 排除执行中 ───
-    # sync 检查由 orchestrator 的汇集阶段统一处理（router 保持局部视角）
+    # ─── 过滤：边级计数检查 + 排除执行中 + per-target JOIN 检查 ───
+    # v9.1: JOIN 检查从 orchestrator._global_converge 下沉到 router，实现 per-target 检查。
+    # 符合「去 join 化调度范式」：每个 step 只要其所有 forward 来源步骤均出现在
+    # completed 中，即可纳入候选，无需独立 join 机制。
+    # 注：backward 边（fail）跳过 JOIN 检查（回退是强制行为）；初始调度无前置依赖也跳过。
     is_initial_dispatch = not args.from_steps
     from_set = set(from_steps) if args.from_steps else set()
     edge_counts = state.get("edge_counts", {})
     edge_counts_changed = False
+
+    # 构建 role → input_groups 映射（用于 JOIN 检查）
+    role_input_groups = {r["role_name"]: r.get("input_groups", []) for r in registry}
 
     dispatchable = []
     for target in candidates:
         # 排除正在执行的
         if target in executing:
             continue
+
+        # v9.1 per-target JOIN 检查：非 backward、非初始调度时，检查目标的前置依赖是否全部完成
+        # 规则：input_groups 为空/不存在 → 无前置依赖 → 放行；
+        #       任一组的全部来源都在 completed 中 → 放行；否则 → 跳过（等待 JOIN）
+        # 注：JOIN 检查放在 max_executions 递增之前，避免 JOIN 未满足时重复递增计数。
+        if not is_backward and not is_initial_dispatch:
+            target_def = steps_map.get(target, {})
+            target_role = target_def.get("role", "")
+            groups = role_input_groups.get(target_role, [])
+            if groups and not any(set(g).issubset(finished) for g in groups):
+                continue  # 前驱未齐，等待 JOIN（不递增 edge_counts）
 
         # 边级 max_executions 检查 + 递增（normal 和 backward 边均检查）
         if not is_initial_dispatch:
