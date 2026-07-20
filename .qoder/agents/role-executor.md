@@ -36,10 +36,34 @@ prompt 包含：
 
 ### 4. 写产出物
 
-根据「## 产出物路径」，用 Write 写入文件。
+根据 task_prompt「## 产出物路径」段中的**绝对路径**写入文件。
+
+**路径权威源规则（极其重要）**：
+- task_prompt 中「## 产出物路径」段的路径是**唯一权威源**
+- **必须严格按该绝对路径写入**，禁止自行截取、修改、拼接路径
+- 特别注意：含 `process/` 前缀的路径（type=process 产出物）不能省略 `process/` 前缀
+- skill.md 中出现的相对路径（如 `outputs/xxx.json`）仅供参考理解，**不以 skill.md 中的路径写入**
+- 已存在文件优先用 SearchReplace；新建文件用 Write
 
 ### 5. 返回结果
 
 按 task_prompt 中「执行要求」指定的返回格式，输出 JSON。返回格式的唯一权威来源是 task_prompt，不参考其他来源。
 
-如果执行失败，在 JSON 中设 `"status": "BLOCKING"` 并附 `"reason"` 字段。
+**status 字段协议（必读）**：
+
+JSON 返回值**必须**含 `"status"` 字段，它是协议信封顶层字段，用于向引擎声明执行是否成功跑完。合法值只有两个：
+
+- `"status": "confirmed"` —— 执行流程完整结束（无论产出物内容如何，Gate 会再校验内容）
+- `"status": "BLOCKING"` —— 主动阻塞（如发现无法处理的异常），附 `reason` 字段
+
+**严禁**使用其他值（如 `"success"`/`"ok"`/`"finished"`/`"error"` 等），否则 Hook② 会判为异常状态并 BLOCKING。
+
+**正确示例**：
+```json
+{"step": "需求分析师", "workspace_id": "xxx", "status": "confirmed", "verdict": "confirmed", "outputs": ["..."]}
+```
+
+**错误示例**（会触发 BLOCKING）：
+```json
+{"step": "需求分析师", "status": "success", ...}  ← status 必须是 confirmed，不是 success
+```

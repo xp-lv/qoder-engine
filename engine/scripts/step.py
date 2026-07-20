@@ -236,6 +236,7 @@ def _build_task_prompt(dispatch, workspace_id, state_path, app_path=None):
     lines.append(f"- skill: {skill_full}")
     lines.append(f"")
     lines.append(f"## 产出物路径")
+    lines.append(f"⚠️ 以下路径是权威绝对路径，必须严格按此路径写入，禁止自行截取/修改/拼接路径（包括不加 process 前缀等错误）。skill.md 中的相对路径仅供参考，以本段绝对路径为准。")
     for ot in output_targets:
         lines.append(f"- {ot.get('name', '')}: {ot.get('path', '')}")
     lines.append(f"")
@@ -279,7 +280,7 @@ def _build_task_prompt(dispatch, workspace_id, state_path, app_path=None):
     lines.append(f"## 执行要求")
     lines.append(f"1. Read skill 文件")
     lines.append(f"2. 按 skill 文件的步骤执行")
-    lines.append(f"3. 用 Write 写入产出物到指定路径")
+    lines.append(f"3. 写入产出物到指定路径（已存在文件优先用 SearchReplace；新建文件用 Write）")
     # v7.0: status 不再要求 role-executor 显式写入，由 Hook② 自动推导。
     # role-executor 只需返回 step + verdict + outputs，status 由系统判定。
     verdict_hint = ""

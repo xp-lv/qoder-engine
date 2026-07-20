@@ -53,8 +53,15 @@ def resolve_app_path(ws_id=None, explicit=None):
 
 
 def resolve_workspace_output(ws_id, relative_path, app_path=None, output_type="deliverable"):
-    if output_type in ("process", "runtime"):
-        return os.path.join(resolve_ws_process(ws_id), relative_path)
+    """将 app.yaml 中的相对路径 resolve 为 workspace 绝对路径。
+
+    v8.3 重构：取消 type=process/runtime 的路径魔法前缀。
+    app.yaml 中的 path 是显式完整的相对路径（如 process/outputs/xxx.json 或 outputs/yyy.md），
+    此函数只负责拼接 workspace root，不再根据 type 推断前缀。
+
+    参数 output_type 保留向后兼容（调用方可继续传），但已不影响路径。
+    knowledge 类型仍然路由到 app_path（app 内置资源，不属于工作区）。
+    """
     if output_type == "knowledge" and app_path:
         return os.path.join(app_path, relative_path)
     ws_root = read_workspace_root(ws_id)

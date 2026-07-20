@@ -382,58 +382,6 @@ def _hook2_log(msg):
         pass
 
 
-def _clear_zombie_executing(sid, reason="", target_step=None, redispatch=True):
-    """清理僵尸 executing：从 STATE 的 step_status 中删除 executing 条目。
-
-    v6.0 机制修复：清除崩溃分支时，从 active_dispatches 恢复完整 dispatch 指令
-    到 pending_dispatches，使下一轮 --next 自动重新 dispatch 崩溃的分支。
-
-    Args:
-      target_step: 指定时只清除该 step（并行场景保护其他活跃分支）。None 时清除全部。
-      redispatch: True 时将 dispatch 指令恢复到 pending_dispatches（崩溃恢复）。
-                  False 时只清除不恢复（BLOCKING 场景，角色有意阻塞不重 dispatch）。
-    """
-    try:
-        sp = resolve_ws_state(sid)
-        cleared = []
-        redispatched = []
-        with state_txn(sp) as st:
-            ss = st.get("step_status", {})
-            active = st.get("active_dispatches") or {}
-            pending = st.get("pending_dispatches") or []
-
-            for s, info in list(ss.items()):
-                if not (isinstance(info, dict) and info.get("status") == "executing"):
-                    continue
-                # v6.0: target_step 指定时只清除该 step
-                if target_step is not None and s != target_step:
-                    continue
-                cleared.append(s)
-                del ss[s]
-                # v6.0: 从 active_dispatches 恢复 dispatch 指令（仅崩溃场景）
-                if redispatch and s in active:
-                    dispatch = active[s]
-                    del active[s]
-                    # 生成新 checkpoint_id（旧的已随崩溃失效）
-                    import uuid
-                    dispatch["checkpoint_id"] = f"ckpt_{uuid.uuid4().hex[:12]}"
-                    pending.append(dispatch)
-                    redispatched.append(s)
-
-            st["active_dispatches"] = active
-            st["pending_dispatches"] = pending if pending else None
-
-        if cleared:
-            msg = f"cleared {cleared}"
-            if redispatched:
-                msg += f", redispatched {redispatched}"
-            _hook2_log(f"ZOMBIE_CLEAR: {msg} ({reason})")
-        return cleared
-    except Exception as e:
-        _hook2_log(f"ZOMBIE_CLEAR_ERROR: {e} ({reason})")
-        return []
-
-
 def handle_role_executor_return(tool_output, workspace_id):
     """处理 role-executor 返回。
 
@@ -468,11 +416,9 @@ def handle_role_executor_return(tool_output, workspace_id):
     # v7.0.1: required_keys 从 ["status"] 改为 ["step"]，确保匹配协议信封而非产出物内容 JSON。
     data = extract_json_from_text(tool_output, required_keys=["step"])
     if not data:
-        # v5.0: role-executor 返回非 JSON（Task 被取消/崩溃/超时）
-        # → 立即清理僵尸 executing，不再等待 Z1 事后检测
-        zombies = _clear_zombie_executing(sid_fallback, "role-executor 返回非 JSON")
-        zombie_msg = f"（已清理僵尸 executing: {zombies}）" if zombies else ""
-        emit(f"BLOCKING：role-executor 返回格式异常，无法解析为 JSON{zombie_msg}。向用户报告此问题，不要继续推进流程。")
+        # role-executor 返回非 JSON（Task 被取消/崩溃/超时）
+        # 不自动清理僵尸 executing，由用户在取消后通过 jump 显式回到正常状态
+        emit(f"BLOCKING：role-executor 返回格式异常，无法解析为 JSON。向用户报告此问题，不要继续推进流程。如需恢复，请使用 jump 回到正常状态。")
         return
 
     sid = data.get("workspace_id", sid_fallback)
@@ -482,18 +428,17 @@ def handle_role_executor_return(tool_output, workspace_id):
     step = data.get("step", "")
 
     # ── v7.0: status 自动推导（fail-safe: 默认 fail）──
-    explicit_status = data.get("status", "")  # role-executor 可能显式写了 status（向后兼容）
+    # status 是 role-executor 的协议信封顶层字段，用于声明执行是否成功跑完。
+    # 合法值只有 "confirmed"（执行完整结束）和 "BLOCKING"（主动阻塞）。
+    # 其他值（如 "success"/"error" 等）或缺失都视为执行层失败。
+    explicit_status = data.get("status", "")
     if explicit_status == "BLOCKING":
-        # v6.0: BLOCKING 是角色有意阻塞，清除但不重 dispatch
-        zombies = _clear_zombie_executing(sid, "role-executor 返回 BLOCKING", target_step=step, redispatch=False)
-        zombie_msg = f"（已清理僵尸 executing: {zombies}）" if zombies else ""
-        emit(f"BLOCKING：role-executor 返回 BLOCKING{zombie_msg}。向用户报告以下信息：\n{json.dumps(data, ensure_ascii=False)[:500]}")
+        # BLOCKING 是角色有意阻塞，不自动清理，由用户通过 jump 显式恢复
+        emit(f"BLOCKING：role-executor 返回 BLOCKING。向用户报告以下信息：\n{json.dumps(data, ensure_ascii=False)[:500]}")
         return
     if explicit_status and explicit_status not in ("confirmed", "BLOCKING"):
-        # 显式写了非 confirmed/BLOCKING 的 status → 异常
-        zombies = _clear_zombie_executing(sid, f"role-executor 异常状态 '{explicit_status}'", target_step=step)
-        zombie_msg = f"（已清理僵尸 executing: {zombies}）" if zombies else ""
-        emit(f"BLOCKING：role-executor 返回异常状态 '{explicit_status}'{zombie_msg}，向用户报告此问题。")
+        # 显式写了非 confirmed/BLOCKING 的 status → 异常（如 role-executor 误写 "success"）
+        emit(f"BLOCKING：role-executor 返回异常状态 '{explicit_status}'。合法值仅为 confirmed/BLOCKING，请检查 role-executor.md 规范。")
         return
 
     # fail-safe 推导：status 默认 fail，以下条件全部满足才覆盖为 confirmed
@@ -510,11 +455,9 @@ def handle_role_executor_return(tool_output, workspace_id):
         status = "fail"
 
     if status == "fail":
-        # fail-safe：推导后仍为 fail → 清理僵尸并 BLOCKING
+        # fail-safe：推导后仍为 fail → 不自动清理，由用户通过 jump 恢复
         reason = "返回 JSON 缺少关键字段（step/verdict）且未显式声明 status=confirmed"
-        zombies = _clear_zombie_executing(sid, f"role-executor 推导状态 fail: {reason}", target_step=step)
-        zombie_msg = f"（已清理僵尸 executing: {zombies}）" if zombies else ""
-        emit(f"BLOCKING：role-executor 执行结果无法确认为成功{zombie_msg}。向用户报告此问题。")
+        emit(f"BLOCKING：role-executor 执行结果无法确认为成功。原因：{reason}。向用户报告此问题。如需恢复，请使用 jump 回到正常状态。")
         return
 
     # ── 调 step.py --submit ──
@@ -531,13 +474,10 @@ def handle_role_executor_return(tool_output, workspace_id):
     submit_next = submit_result.get("next", "")
     _hook2_log(f"SUBMIT_RESULT: next={submit_next} action={submit_result.get('action','')} gate_results={json.dumps(submit_result.get('gate_results',[]), ensure_ascii=False)[:200]}")
 
-    # submit 失败时清理僵尸并报错
+    # submit 失败时报错，不自动清理，由用户通过 jump 恢复
     if submit_result.get("action") == "error" or submit_result.get("status") == "error":
         _err = submit_result.get("error", "submit 失败")
-        # v6.0: 精确清除崩溃的 step
-        zombies = _clear_zombie_executing(sid, f"submit 失败: {_err}", target_step=step)
-        zombie_msg = f"（已清理僵尸 executing: {zombies}）" if zombies else ""
-        emit(f"BLOCKING：引擎错误 — {_err}{zombie_msg}")
+        emit(f"BLOCKING：引擎错误 — {_err}。如需恢复，请使用 jump 回到正常状态。")
         return
 
     # ── pbc 门控（从 step_status 派生）──
@@ -768,7 +708,8 @@ def main():
         elif agent_type == "role-executor":
             handle_role_executor_return(tool_output, workspace_id)
     except Exception as e:
-        # Hook② 内部错误 → 清理僵尸 + 写日志 + emit 报错（不静默退出）
+        # Hook② 内部错误 → 写日志 + emit 报错（不静默退出）
+        # 不自动清理僵尸 executing，由用户通过 jump 显式恢复
         import traceback
         debug_path = os.path.join(os.path.dirname(__file__), "_hook_error.log")
         try:
@@ -776,13 +717,7 @@ def main():
                 f.write(f"\n[{__import__('datetime').datetime.now()}] {traceback.format_exc()}\n")
         except:
             pass
-        # v5.0: Hook② 内部异常时也清理僵尸 executing
-        if workspace_id:
-            try:
-                _clear_zombie_executing(workspace_id, f"Hook② 内部异常: {e}")
-            except Exception:
-                pass
-        emit(f"BLOCKING：Hook② 内部异常 — {e}\n{traceback.format_exc()[:500]}")
+        emit(f"BLOCKING：Hook② 内部异常 — {e}\n{traceback.format_exc()[:500]}。如需恢复，请使用 jump 回到正常状态。")
 
     sys.exit(0)
 

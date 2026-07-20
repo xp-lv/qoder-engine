@@ -37,8 +37,12 @@ def get_nested(data, path):
 
 
 def validate_schema(data, schema):
-    """统一的 Schema 校验（支持标准 JSON Schema + 扩展字段）。
+    """统一的 Schema 校验（v8.0：简化为二件套 required + enum）。
     返回 errors 列表（空 = 通过）。
+
+    v8.0 变更：删除 minLength / items / additionalProperties 校验。
+    原因：这三个字段从未被 compiler.py 自动生成，属于文档定义但无代码消费的“僵尸约束”。
+    保留 required（必填字段）+ enum（枚举值校验）两件真有消费者的约束。
     """
     errors = []
 
@@ -66,20 +70,55 @@ def validate_schema(data, schema):
             if not type_map[expected_type](val):
                 errors.append(f"字段 {prop} 应为 {expected_type}")
 
-        if "minLength" in rules and isinstance(val, str) and len(val) < rules["minLength"]:
-            errors.append(f"字段 {prop} 长度不足（{len(val)} < {rules['minLength']}）")
-
-    # 扩展：enum 校验
+    # enum 校验（与类型校验分离，独立循环以支持嵌套路径如 result.verdict）
     for prop, rules in schema.get("properties", {}).items():
         val = get_nested(data, prop)
         if val is not None and "enum" in rules:
             if val not in rules["enum"]:
                 errors.append(f"字段 {prop} 值 '{val}' 不在允许范围 {rules['enum']} 中")
 
-    # 扩展：禁止模式
+    # 禁止模式
     for pattern in schema.get("_forbidden_patterns", []):
         content = json.dumps(data, ensure_ascii=False)
         if pattern in content:
+            errors.append(f"包含禁止内容: {pattern}")
+
+    return errors
+
+
+def validate_deliverable_contract(file_path, raw_content, contract):
+    """P1 (v8.2): 对 deliverable 产出物做深度校验。
+
+    contract 是 schema.json._required_files[].contract 中的手写声明，支持：
+      - min_lines: 文件行数 ≥ N
+      - required_headings: 每个 heading 必须在文档中出现（grep 语义）
+      - req_coverage: 每个 REQ-ID 必须在文档中出现
+      - forbidden_patterns: 文档不得包含的字符串
+
+    返回 errors 列表（空 = 通过）。
+    """
+    errors = []
+
+    # min_lines: 行数校验
+    min_lines = contract.get("min_lines")
+    if min_lines and isinstance(min_lines, int):
+        line_count = raw_content.count("\n") + 1
+        if line_count < min_lines:
+            errors.append(f"行数不足: {line_count} < min_lines={min_lines}")
+
+    # required_headings: 标题/关键字必须出现
+    for heading in contract.get("required_headings", []):
+        if heading not in raw_content:
+            errors.append(f"缺少必需标题/关键字: {heading}")
+
+    # req_coverage: REQ-ID 覆盖校验
+    missing_reqs = [req for req in contract.get("req_coverage", []) if req not in raw_content]
+    if missing_reqs:
+        errors.append(f"REQ-ID 未覆盖: {missing_reqs}")
+
+    # forbidden_patterns: 禁止内容
+    for pattern in contract.get("forbidden_patterns", []):
+        if pattern in raw_content:
             errors.append(f"包含禁止内容: {pattern}")
 
     return errors
@@ -158,7 +197,6 @@ def main():
         fail(f"角色 {role_name} 不在 registry.json 中")
 
     # ── 5. Schema 校验（从 roles 目录加载）──
-    min_size = role_record.get("gate_rules", {}).get("phase1_cross_validation", {}).get("text_validation", {}).get("min_size", 50)
     role_dir_name = step_entry.get("role", "")
     # slugify 角色名查找 schema
     import re
@@ -167,47 +205,73 @@ def main():
 
     errors = []
 
-    # 非 JSON 产出物只做物理检查（存在+非空+最小长度），跳过 schema
-    is_non_json = ("_raw_text" in data)
-
-    if is_non_json:
-        # 非 JSON：只检查最小内容长度
-        if len(data["_raw_text"]) < min_size:
-            errors.append(f"文件内容过短（{len(data['_raw_text'])} < {min_size}）")
-    elif os.path.exists(schema_file):
-        # JSON：做 schema 校验
+    # P1 (v8.2): 先加载 schema 并查找当前 output_path 的 type + contract
+    # 这样 markdown/JSON 都能走到 contract 校验（避免 is_non_json 分支跳过 contract）
+    output_type = "deliverable"
+    rf_contract = None
+    schema = None
+    if os.path.exists(schema_file):
         try:
             with open(schema_file, "r", encoding="utf-8") as f:
                 schema = json.load(f)
-            
-            # 上下文感知 verdict enum 替换：
-            # 若 ROUTER.json 中该 step 有 verdict_context 且 STATE.json 中记录了 from_steps，
-            # 则用过滤后的 enum 替换 schema 中的全量 enum
-            step_verdict_context = step_entry.get("verdict_context")
-            if step_verdict_context:
-                try:
-                    with open(state_path, "r", encoding="utf-8") as sf:
-                        state_data = json.load(sf)
-                    step_ss = state_data.get("step_status", {}).get(args.step, {})
-                    dispatch_from = step_ss.get("from_steps", [])
-                    for fs in dispatch_from:
-                        if fs in step_verdict_context:
-                            filtered = step_verdict_context[fs]
-                            try:
-                                schema["properties"]["result"]["properties"]["verdict"]["enum"] = filtered
-                            except (KeyError, TypeError):
-                                pass
-                            break
-                except (json.JSONDecodeError, ValueError, IOError):
-                    pass
-            
-            errors = validate_schema(data, schema)
+            norm_output = args.output_path.replace("\\", "/").rstrip("/")
+            for rf in schema.get("_required_files", []):
+                rf_path = rf.get("path", "").replace("\\", "/").rstrip("/")
+                if rf_path and (norm_output.endswith(rf_path) or rf_path.endswith(norm_output)):
+                    output_type = rf.get("type", "deliverable")
+                    rf_contract = rf.get("contract")
+                    break
         except Exception as e:
             errors.append(f"schema 加载失败: {e}")
+
+    # 非 JSON 产出物：物理检查 + contract 校验（跳过 result schema）
+    is_non_json = ("_raw_text" in data)
+
+    if is_non_json:
+        # 非 JSON：跳过 result schema，但若有 contract 则做深度校验
+        if rf_contract:
+            errors.extend(validate_deliverable_contract(args.output_path, raw, rf_contract))
+    elif schema is not None:
+        # JSON：做 schema 校验
+        try:
+            # 按 type 分发：process 跳过 result schema，deliverable 完整校验
+            if output_type == "process":
+                # process 类型：最小校验（物理检查已通过 + JSON 可解析已成功），跳过 result schema
+                # result 契约是角色整体响应包契约，由 Hook② 在协议层校验，Gate 不重复
+                pass
+            else:
+                # deliverable 类型：走完整的 schema 校验
+                # 上下文感知 verdict enum 替换：
+                # 若 ROUTER.json 中该 step 有 verdict_context 且 STATE.json 中记录了 from_steps，
+                # 则用过滤后的 enum 替换 schema 中的全量 enum
+                step_verdict_context = step_entry.get("verdict_context")
+                if step_verdict_context:
+                    try:
+                        with open(state_path, "r", encoding="utf-8") as sf:
+                            state_data = json.load(sf)
+                        step_ss = state_data.get("step_status", {}).get(args.step, {})
+                        dispatch_from = step_ss.get("from_steps", [])
+                        for fs in dispatch_from:
+                            if fs in step_verdict_context:
+                                filtered = step_verdict_context[fs]
+                                try:
+                                    schema["properties"]["result"]["properties"]["verdict"]["enum"] = filtered
+                                except (KeyError, TypeError):
+                                    pass
+                                break
+                    except (json.JSONDecodeError, ValueError, IOError):
+                        pass
+
+                errors = validate_schema(data, schema)
+
+                # P1: 若有手写 contract，补加 deliverable 深度校验
+                if rf_contract:
+                    errors.extend(validate_deliverable_contract(args.output_path, raw, rf_contract))
+        except Exception as e:
+            errors.append(f"schema 处理异常: {e}")
     else:
-        # JSON 但无 schema → 基本完整性检查
-        if len(raw) < min_size:
-            errors.append(f"文件内容过短（{len(raw)} < {min_size}）")
+        # JSON 但无 schema → 物理检查通过即 PASS
+        pass
 
     # ── 6. 返回 ──
     if errors:

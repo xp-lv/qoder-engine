@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "result": {
+      "type": "object",
+      "required": [
+        "verdict",
+        "summary"
+      ],
+      "properties": {
+        "verdict": {
+          "type": "string",
+          "enum": [
+            "consistency_defect",
+            "passed",
+            "reqid_approved",
+            "reqid_rejected",
+            "terminated"
+          ]
+        },
+        "summary": {
+          "type": "string"
+        },
+        "findings": {
+          "type": "array"
+        },
+        "errors": {
+          "type": "array"
+        }
+      }
+    }
+  },
+  "required": [
+    "result"
+  ],
+  "_required_files": [
+    {
+      "name": "终审裁决书",
+      "path": "outputs/终审裁决书.json",
+      "type": "deliverable"
+    },
+    {
+      "name": "REQ-ID增补审批",
+      "path": "process/outputs/REQ-ID增补审批.json",
+      "type": "process"
+    }
+  ]
+}

@@ -206,20 +206,31 @@ def main():
     for dir_path in auto_dirs_resolved:
         os.makedirs(dir_path, exist_ok=True)
 
-    # 为 inputs 创建占位骨架（按 type 路由，与 router 的 resolve_workspace_output 一致）
+    # 为 inputs 创建占位骨架
+    # v8.3 重构：取消 type=process 机制，路径已显式（process/outputs/xxx.json 或 outputs/yyy.md）。
+    # v8.2 方案 D 仍然适用：.json 文件不创建占位符（避免 Qoder Write append 污染）。
+    # 只需按扩展名判断，与 type 字段无关。
     for role in registry:
         for inp in role.get("inputs", []):
+            inp_path = inp.get("path", "")
+            if not inp_path:
+                continue
+            # v8.3: output_type 参数保留向后兼容，但已不影响路径 resolve
             inp_type = inp.get("type", "deliverable")
-            if inp_type in ("deliverable", "process"):
-                inp_path = inp.get("path", "")
-                if not inp_path:
+            full_path = resolve_workspace_output(ws_id, inp_path, app_path, inp_type)
+            if not os.path.exists(full_path):
+                os.makedirs(os.path.dirname(full_path), exist_ok=True)
+                # v8.2 方案 D：按扩展名决定占位符策略
+                _, ext = os.path.splitext(full_path)
+                if ext.lower() == '.json':
+                    # .json 文件不创建占位符，保持不存在状态
+                    # role-executor 用 Write 创建新文件（避免 append 污染）
                     continue
-                full_path = resolve_workspace_output(ws_id, inp_path, app_path, inp_type)
-                if not os.path.exists(full_path):
-                    os.makedirs(os.path.dirname(full_path), exist_ok=True)
-                    placeholder = f"# {inp.get('name', inp_path)}\n\n（待填写）\n"
-                    with open(full_path, "w", encoding="utf-8") as f:
-                        f.write(placeholder)
+                # .md 或其他文件：创建 markdown 占位符
+                inp_name = inp.get('name', inp_path)
+                placeholder = f"# {inp_name}\n\n（待填写）\n"
+                with open(full_path, "w", encoding="utf-8") as f:
+                    f.write(placeholder)
 
     # Step 7: 初始化 STATE.json
     if os.path.exists(state_path) and not args.force:

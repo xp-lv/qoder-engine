@@ -415,8 +415,7 @@ def _d2_branch_recoverability(state, router_steps, violations):
             continue
         # step 在 SS 但不在 CP → 正常的活跃执行，不是违规
         # D2 不产生 violation，只做信息记录
-        # 真正的僵尸清理由 Hook② 的 _clear_zombie_executing 负责
-        # （在 role-executor 返回异常时触发，而非在 health_check 时盲猜）
+        # 僵尸 executing 的清理由用户通过 jump 显式触发（Hook② 不再自动清理）
 
 
 def _d3_join_liveness(state, router_steps, join_map, violations):

@@ -125,6 +125,11 @@ def _do_jump(state_path, target_step):
         # v7.3: 恢复并行兄弟分支
         # 快照中 step_status/active_dispatches 含有 jump 时刻正在执行的兄弟分支
         # 时间回退后没有实际 agent 在跑，需将它们的 dispatch 指令转入 pending_dispatches 重新分发
+        # v8.0 修复 P1-2：兄弟分支的 dispatch 必须重新生成 checkpoint_id，
+        # 否则下游 step.py --submit 的幂等检查会按旧 checkpoint_id 误判为已处理。
+        import copy as _copy
+        import uuid as _uuid
+        from datetime import datetime, timezone as _tz
         snap_ss = st.get("step_status", {})
         snap_active = st.get("active_dispatches", {})
 
@@ -133,7 +138,19 @@ def _do_jump(state_path, target_step):
             if step_name == target_step:
                 continue
             if entry.get("status") == "executing" and step_name in snap_active:
-                sibling_dispatches.append(snap_active[step_name])
+                # 复制后重新生成 checkpoint_id，避免与快照前的幂等记录冲突
+                new_dispatch = _copy.deepcopy(snap_active[step_name])
+                old_ckpt = new_dispatch.get("checkpoint_id", "")
+                new_ckpt = f"ckpt_{_uuid.uuid4().hex[:12]}"
+                new_dispatch["checkpoint_id"] = new_ckpt
+                # 记录调试信息：源于 jump 重新生成
+                new_dispatch.setdefault("_resumed_from_jump", []).append({
+                    "target_step": target_step,
+                    "old_checkpoint_id": old_ckpt,
+                    "new_checkpoint_id": new_ckpt,
+                    "timestamp": datetime.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                })
+                sibling_dispatches.append(new_dispatch)
 
         if sibling_dispatches:
             existing_pd = st.get("pending_dispatches") or []

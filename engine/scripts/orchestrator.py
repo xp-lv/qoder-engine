@@ -60,11 +60,38 @@ def cache_dispatches(state_path, dispatches):
 
 # ─── 状态转换统一 API ───
 
-def mark_complete(state_path):
-    """所有 complete 路径的唯一入口：写 terminal_state。"""
+def mark_complete(state_path, app_path=None):
+    """所有 complete 路径的唯一入口：写 terminal_state。
+
+    v9.0 Bug 4 修复：加肯定式 guard。完成必须验证所有 ROUTER step ∈ finished，
+    拒绝任何「路由失败被误判为完成」的情况。
+    """
     with state_txn(state_path) as st:
-        if not st.get("terminal_state"):
-            st["terminal_state"] = "completed"
+        if st.get("terminal_state"):
+            return  # 已终态，幂等
+
+        # 肯定式 guard：验证所有 step 确实已完成（而非路由失败的误判）
+        if app_path:
+            router_path = os.path.join(app_path, "ROUTER.json")
+            if os.path.exists(router_path):
+                try:
+                    with open(router_path, "r", encoding="utf-8") as f:
+                        router_steps = json.load(f).get("steps", [])
+                    all_steps = {s["step"] for s in router_steps}
+                    finished = set(st.get("completed", {}).keys())
+                    unfinished = all_steps - finished
+                    if unfinished:
+                        # 拒绝标记完成，写入 engine_error 让用户感知
+                        st["engine_error"] = {
+                            "reason": f"mark_complete 被拒绝：{len(unfinished)} 个 step 未完成: {list(unfinished)[:5]}",
+                            "timestamp": now_iso(),
+                            "last_good_step": _find_last_good_step(st),
+                        }
+                        return  # 不写 terminal_state
+                except Exception:
+                    pass  # ROUTER 读取失败时降级为原行为
+
+        st["terminal_state"] = "completed"
 
 def load_router_and_registry(app_path):
     """加载 ROUTER.json 和 registry.json，返回 (router_steps, registry, reg_map, step_role_map)."""
@@ -129,17 +156,22 @@ def phase_dispatch(state_path, app_path, workspace_id, from_steps, on_result, ta
     - 路由信号从 pending_routes 读取（瞬态，路由后清空）
     - JOIN 判断从 completed 读取（持久，整个执行期间保留）
     - 这两个职责不再共享同一数据结构，消除多源冲突
+
+    v8.0 修复 P0-2 ABA：pending_dispatches 的读+清空原子化在单个 state_txn 内完成。
+    原实现：load_state 拿 st → state_txn 清空 → 用旧 st 的 dispatches。中间窗口内
+    若有其他进程（如 Hook② cache）追加 dispatch，会被静默丢失。现改为：
+    全程在 state_txn 内 load + clear + extract dispatches。
     """
 
+    # v8.0: pending_dispatches 的原子读-改-写（防止并发追加丢失）
     st = load_state(state_path)
-
-    # 1. 优先读取 pending_dispatches 缓存（零参数调度核心）
     pending = st.get("pending_dispatches")
     if pending:
-        # v5.2: 用 state_txn 原子清除 pending_dispatches，避免陈旧 st 覆写子进程更新
-        with state_txn(state_path) as fresh_st:
-            fresh_st["pending_dispatches"] = None
-        dispatches = pending
+        # P0-2 修复：在 state_txn 内原子完成「读+清空+取 dispatches」
+        # 避免与并发 cache_dispatches 的追加产生 ABA
+        with state_txn(state_path) as locked_st:
+            dispatches = locked_st.get("pending_dispatches") or []
+            locked_st["pending_dispatches"] = None
         # 消费 pending_routes（瞬态信号，用完即清空）
         _clear_pending_routes(state_path)
         _process_dispatches(state_path, app_path, workspace_id, dispatches, from_steps or [], task_request)
@@ -175,14 +207,15 @@ def phase_dispatch(state_path, app_path, workspace_id, from_steps, on_result, ta
         all_dispatches = _process_dispatch_pipeline(all_dispatches, st, app_path)
 
         if not all_dispatches:
-            # 清空 pending_routes（已路由完毕，无 dispatch 产出）
-            _clear_pending_routes(state_path)
+            # v9.0 Bug 3 修复：先诊断（pending_routes 仍有原始信号），再清空
             if all_complete:
-                mark_complete(state_path)
+                _clear_pending_routes(state_path)
+                mark_complete(state_path, app_path)
                 output({"status": "success", "next": "complete", "reason": "all_complete"})
             else:
                 diag_st = load_state(state_path)
                 reason, is_error = _diagnose_wait_reason(diag_st, app_path)
+                _clear_pending_routes(state_path)  # 诊断后再清空（Case 4 需读 pending_routes）
                 next_val = "error" if is_error else "wait"
                 if is_error:
                     _mark_engine_error(state_path, reason)
@@ -215,7 +248,7 @@ def phase_dispatch(state_path, app_path, workspace_id, from_steps, on_result, ta
 
     if not dispatches:
         if message == "all_complete":
-            mark_complete(state_path)
+            mark_complete(state_path, app_path)
             output({"status": "success", "next": "complete", "reason": "all_complete"})
         else:
             diag_st = load_state(state_path)
@@ -237,24 +270,29 @@ def _global_converge(dispatches, st, app_path):
     - input_groups 为空/不存在 → 无前置依赖 → 放行
     - 任一组的全部来源都在 completed 中 → 放行
     - 否则 → 等待
+
+    v8.0 修复 P1-1：dispatch 字段名鲁棒化。原实现只查 d["role"]，
+    但历史 / 未来可能用 role_name。现统一两种字段名查询，避免漏检。
     """
     completed_set = set(_get_completed(st).keys())
-    
+
     reg_path = os.path.join(app_path, "registry.json")
     if not os.path.exists(reg_path):
         return dispatches
     with open(reg_path, "r", encoding="utf-8") as f:
         registry = json.load(f)
-    
+
     # 构建 role_name → input_groups 映射，再通过 dispatch 的 role 查找
     role_input_groups = {r["role_name"]: r.get("input_groups", []) for r in registry}
-    
+
     filtered = []
     for d in dispatches:
-        groups = role_input_groups.get(d.get("role", ""), [])
+        # v8.0 P1-1：优先用 role，fallback 到 role_name，提高字段鲁棒性
+        role_key = d.get("role") or d.get("role_name") or ""
+        groups = role_input_groups.get(role_key, [])
         if not groups or any(set(g).issubset(completed_set) for g in groups):
             filtered.append(d)
-    
+
     return filtered
 
 
@@ -450,6 +488,11 @@ def _check_required_files(app_path, role_name, workspace_id, state_path=None):
         if "{" in rf_path:
             continue
         rf_type = rf.get("type", "deliverable")
+        # process 类型为过程产物（中间态），不强制存在
+        # 多路径角色（如终审裁决者）每条路径只产部分 process 文件，强制校验会造成 fail 边死循环
+        # 只有 deliverable（最终交付物）才强制存在性校验
+        if rf_type == "process":
+            continue
         try:
             resolved = resolve_workspace_output(ws_id, rf_path, app_path, rf_type)
         except (FileNotFoundError, TypeError):
@@ -617,7 +660,10 @@ def phase_post_execute(state_path, app_path, workspace_id, results_json):
     if failed:
         output({"status": "success", "next": "error", "failed": failed, "gate_results": gate_results})
 
-    # 统一路径：所有 auto_confirmed 的 step → 调 router → _global_converge → 缓存
+    # 统一路径：所有 auto_confirmed 的 step → 调 router → 累积 → 统一 pipeline
+    # v9.0 JOIN 去重修复：循环内只累积原始 dispatch，循环后统一过 _process_dispatch_pipeline
+    # 原实现每次循环内单独调 _global_converge（只检查 JOIN 满足性，无去重），
+    # 导致 N 个并行红队各自触发同一 JOIN 目标时产生 N 份重复 dispatch。
     if auto_confirmed and not pending:
         all_dispatches = []
         all_complete = False
@@ -640,19 +686,21 @@ def phase_post_execute(state_path, app_path, workspace_id, results_json):
             rt_dispatches = rt_result.get("dispatch_instructions", [])
             rt_message = rt_result.get("message", "")
             if rt_dispatches:
-                rt_st = load_state(state_path)
-                rt_dispatches = _global_converge(rt_dispatches, rt_st, app_path)
-            if rt_dispatches:
-                all_dispatches.extend(rt_dispatches)
+                all_dispatches.extend(rt_dispatches)  # 只累积，不 converge
             elif rt_message == "all_complete":
                 all_complete = True
+
+        # 循环结束后统一过 pipeline：converge（JOIN 检查）+ 去重 + 跨状态过滤
+        if all_dispatches:
+            pipe_st = load_state(state_path)
+            all_dispatches = _process_dispatch_pipeline(all_dispatches, pipe_st, app_path)
 
         if all_dispatches:
             cache_dispatches(state_path, all_dispatches)
             output({"status": "success", "next": "dispatch",
                     "auto_confirmed": auto_confirmed, "gate_results": gate_results, "failed": failed})
         elif all_complete:
-            mark_complete(state_path)
+            mark_complete(state_path, app_path)
             output({"status": "success", "next": "complete",
                     "auto_confirmed": auto_confirmed, "gate_results": gate_results, "failed": failed})
         else:
@@ -733,7 +781,8 @@ def phase_post_confirm(state_path, app_path, workspace_id, decisions_json):
     if not advance_steps:
         output({"status": "success", "next": "dispatch"})
 
-    # 统一路径：所有 advance 的 step → 调 router → _global_converge → 缓存
+    # 统一路径：所有 advance 的 step → 调 router → 累积 → 统一 pipeline
+    # v9.0 JOIN 去重修复：与 post_execute 路径保持一致，循环后统一过 pipeline
     all_dispatches = []
     all_complete = False
     for a in advance_steps:
@@ -750,18 +799,20 @@ def phase_post_confirm(state_path, app_path, workspace_id, decisions_json):
         rt_dispatches = rt_result.get("dispatch_instructions", [])
         rt_message = rt_result.get("message", "")
         if rt_dispatches:
-            rt_st = load_state(state_path)
-            rt_dispatches = _global_converge(rt_dispatches, rt_st, app_path)
-        if rt_dispatches:
-            all_dispatches.extend(rt_dispatches)
+            all_dispatches.extend(rt_dispatches)  # 只累积，不 converge
         elif rt_message == "all_complete":
             all_complete = True
+
+    # 循环结束后统一过 pipeline：converge（JOIN 检查）+ 去重 + 跨状态过滤
+    if all_dispatches:
+        pipe_st = load_state(state_path)
+        all_dispatches = _process_dispatch_pipeline(all_dispatches, pipe_st, app_path)
 
     if all_dispatches:
         cache_dispatches(state_path, all_dispatches)
         output({"status": "success", "next": "dispatch"})
     elif all_complete:
-        mark_complete(state_path)
+        mark_complete(state_path, app_path)
         output({"status": "success", "next": "complete"})
     else:
         diag_st = load_state(state_path)

@@ -66,6 +66,7 @@ def main():
     user_request = state.get("metadata", {}).get("user_request", "") or args.task_request
 
     # ─── 确定候选目标 STEP ───
+    missing_steps = []  # v9.0: 追踪找不到 step_def 的 from_step（用于 route_failed 诊断）
 
     if not args.from_steps:
             # 初始调度：返回入口 STEP
@@ -91,6 +92,7 @@ def main():
         for from_step in from_steps:
             step_def = steps_map.get(from_step)
             if not step_def:
+                missing_steps.append(from_step)  # v9.0: 记录而非静默跳过（Bug 1 修复）
                 continue
             transitions = step_def.get("transitions", {})
             # 精确匹配指定的 on 值
@@ -169,7 +171,7 @@ def main():
             if resolved not in inputs:
                 inputs.append(resolved)
 
-        # 统一注入边声明的 carries（编译期确定，无论 forward/backward/custom）
+        # 统一注入边声明的 carries（v8.4：app.yaml 显式声明，未写 carries 的边返回 [] → 零物料）
         if args.from_steps:
             for fs in from_steps:
                 fs_def = steps_map.get(fs, {})
@@ -177,8 +179,9 @@ def main():
                 edge = fs_trans.get(args.on, {})
                 if isinstance(edge, dict):
                     for c in edge.get("carries", []):
-                        c_type = c.get("type", "feedback")
-                        resolved = resolve_workspace_output(args.workspace_id, c["path"], app_path, c_type)
+                        # carries 元素为 {path} dict（v8.4 删除了 type/name 死字段）
+                        c_path = c if isinstance(c, str) else c["path"]
+                        resolved = resolve_workspace_output(args.workspace_id, c_path, app_path, "deliverable")
                         if resolved not in inputs:
                             inputs.append(resolved)
 
@@ -264,11 +267,30 @@ def main():
         })
 
     if not dispatchable:
-        # 无可调度：检查是否全部完成
-        if not executing:
+        # v9.0 三态语义：区分「真正完成」/「路由失败」/「候选被过滤」（Bug 1+2 修复）
+        # 肯定式判定完成：所有 ROUTER step ∈ finished（不再用否定式推理）
+        all_steps = {s["step"] for s in steps}
+        if all_steps.issubset(finished) and not executing:
             output({"status": "success", "error_code": None, "message": "all_complete", "dispatch_instructions": []})
-        else:
-            output({"status": "success", "error_code": None, "message": "no_dispatchable_steps", "dispatch_instructions": []})
+
+        # 路由失败：有 from_steps 但找不到目标（STATE 漂移 / verdict 无匹配边）
+        if args.from_steps:
+            if missing_steps:
+                reason = f"from_step 不存在于 ROUTER.json: {missing_steps}（STATE 与 ROUTER 可能版本不一致）"
+            elif not candidates:
+                reason = f"verdict '{args.on}' 在 from_steps {from_steps} 的 transitions 中无匹配边"
+            else:
+                reason = f"候选目标 {candidates} 全部被过滤（executing/max_executions）"
+            output({
+                "status": "success",
+                "error_code": None,
+                "message": "route_failed",
+                "reason": reason,
+                "dispatch_instructions": []
+            })
+
+        # 初始调度无可调度（正常：所有 step 已完成或执行中）
+        output({"status": "success", "error_code": None, "message": "no_dispatchable_steps", "dispatch_instructions": []})
 
     output({"status": "success", "error_code": None, "dispatch_instructions": dispatch_instructions})
 
