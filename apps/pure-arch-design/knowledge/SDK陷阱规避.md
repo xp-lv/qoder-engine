@@ -15,7 +15,7 @@
 **陷阱**：校验角色 skill.md 若仍写"emit confirmed 由 SDK 转译"，会导致 verdict 不匹配 ROUTER transitions，路由失败。
 
 **正确做法**：
-- 校验角色直接 emit 对应的业务 verdict（如 `blueprint_v1_ready` / `r1_revised` / `loop`）
+- 校验角色直接 emit 对应的业务 verdict（如 `blueprint_v1_ready` / `unregistered_requirement` / `loop`）
 - 业务 verdict 必须在 ROUTER.json transitions 中有对应边
 - schema.json 的 verdict enum 从 edges 自然推导（compiler 自动生成）
 

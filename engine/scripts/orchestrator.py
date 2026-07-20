@@ -55,34 +55,16 @@ def run_script(cmd):
 def mark_complete(state_path, app_path=None):
     """所有 complete 路径的唯一入口：写 terminal_state。
 
-    v9.0 Bug 4 修复：加肯定式 guard。完成必须验证所有 ROUTER step ∈ finished，
-    拒绝任何「路由失败被误判为完成」的情况。
+    v9.2.1 简化：完成判定的权威源是 router.py（通过可达集闭合检查返回
+    message="all_complete"）。本函数只做状态写入 + 幂等检查，
+    不重复完成判定逻辑（避免双检查点维护负担与不一致风险）。
+    
+    router.py 是 DAG 拓扑的路由决策者，“是否完成”本质上是“路由能否走到
+    下一个 step”，是 router 的职责。本函数信任 router 的判定。
     """
     with state_txn(state_path) as st:
         if st.get("terminal_state"):
             return  # 已终态，幂等
-
-        # 肯定式 guard：验证所有 step 确实已完成（而非路由失败的误判）
-        if app_path:
-            router_path = os.path.join(app_path, "ROUTER.json")
-            if os.path.exists(router_path):
-                try:
-                    with open(router_path, "r", encoding="utf-8") as f:
-                        router_steps = json.load(f).get("steps", [])
-                    all_steps = {s["step"] for s in router_steps}
-                    finished = set(st.get("completed", {}).keys())
-                    unfinished = all_steps - finished
-                    if unfinished:
-                        # 拒绝标记完成，写入 engine_error 让用户感知
-                        st["engine_error"] = {
-                            "reason": f"mark_complete 被拒绝：{len(unfinished)} 个 step 未完成: {list(unfinished)[:5]}",
-                            "timestamp": now_iso(),
-                            "last_good_step": _find_last_good_step(st),
-                        }
-                        return  # 不写 terminal_state
-                except Exception:
-                    pass  # ROUTER 读取失败时降级为原行为
-
         st["terminal_state"] = "completed"
 
 def load_router_and_registry(app_path):
@@ -465,14 +447,10 @@ def _check_required_files(app_path, role_name, workspace_id, state_path=None):
         # 跳过模板路径（如 app-v{iteration}.yaml）
         if "{" in rf_path:
             continue
-        rf_type = rf.get("type", "deliverable")
-        # process 类型为过程产物（中间态），不强制存在
-        # 多路径角色（如终审裁决者）每条路径只产部分 process 文件，强制校验会造成 fail 边死循环
-        # 只有 deliverable（最终交付物）才强制存在性校验
-        if rf_type == "process":
-            continue
+        # v9.2: 删除 type=process 跳过逻辑
+        # 所有 _required_files 统一校验存在性（信封字段由 Gate Layer 0 校验）
         try:
-            resolved = resolve_workspace_output(ws_id, rf_path, app_path, rf_type)
+            resolved = resolve_workspace_output(ws_id, rf_path, app_path)
         except (FileNotFoundError, TypeError):
             continue
         if not os.path.exists(resolved):
@@ -505,20 +483,48 @@ def phase_post_execute(state_path, app_path, workspace_id, results_json):
 
     for r in results:
         step = r.get("step", "")
-        # v7.0: status 由 Hook② 推导后注入。如果 status 仍缺失（理论上不应发生），
-        # fail-safe: 默认 confirmed（因为 Hook② 已过滤了失败 case，能到这里说明已通过协议层）。
-        # 显式 fail/BLOCKING 才判失败。
-        status = r.get("status", "confirmed")
+        envelope = r.get("envelope", {})  # v9.2: 完整协议信封
         output_paths = [o.get("path", "") for o in r.get("outputs", [])]
         role_verdict = r.get("verdict", "")
 
-        if status not in ("confirmed", ""):
-            failed.append({"step": step, "reason": f"role-executor status={status}", "error": r.get("error")})
-            continue
-
         _role = step_role_map.get(step, "")
 
-        # ── Phase A: 对该 step 的所有产出物逐一 Gate 校验，汇总结果 ──
+        # ════════════════════════════════════════════════════════════
+        # Phase 0: Gate Layer 0 信封校验（v9.2 新增）
+        # 校验 role-executor 返回值的格式契约。
+        # 失败 → ENVELOPE_FAIL → error 路径（BLOCKING，不走 fail 边）
+        # ════════════════════════════════════════════════════════════
+        if envelope:
+            envelope_cmd = [
+                "python3", "engine/scripts/gate.py",
+                "--mode", "envelope",
+                "--step", step,
+                "--envelope", json.dumps(envelope, ensure_ascii=False),
+                "--state-path", state_path,
+                "--app-path", app_path,
+            ]
+            ok_env, env_result = run_script(envelope_cmd)
+            env_verdict = env_result.get("verdict", "ENVELOPE_FAIL") if ok_env else "ENVELOPE_FAIL"
+
+            if env_verdict == "ENVELOPE_FAIL":
+                # 信封违规 → BLOCKING，不走 fail 边
+                env_errors = env_result.get("errors", ["信封校验失败(无具体错误)"])
+                failed.append({
+                    "step": step,
+                    "reason": "envelope_violation",
+                    "error": "; ".join(env_errors),
+                })
+                gate_results.append({
+                    "step": step,
+                    "output_path": "<envelope>",
+                    "verdict": "ENVELOPE_FAIL",
+                    "errors": env_errors,
+                })
+                continue  # 走 error 路径
+
+        # ════════════════════════════════════════════════════════════
+        # Phase A: Gate Layer 1 产出物文件校验（原有逻辑）
+        # ════════════════════════════════════════════════════════════
         step_gate_entries = []
         step_all_pass = True
         for out_path in output_paths:
@@ -526,6 +532,7 @@ def phase_post_execute(state_path, app_path, workspace_id, results_json):
                 continue
             gate_cmd = [
                 "python3", "engine/scripts/gate.py",
+                "--mode", "file",  # v9.2: 显式指定文件模式
                 "--step", step,
                 "--output-path", out_path,
                 "--state-path", state_path,

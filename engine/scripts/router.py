@@ -222,8 +222,8 @@ def main():
         inputs = []
         explicit_inputs = reg.get("inputs", [])
         for inp in explicit_inputs:
-            inp_type = inp.get("type", "deliverable")
-            resolved = resolve_workspace_output(args.workspace_id, inp["path"], app_path, inp_type)
+            # v9.2: 删除 inp_type（resolve_workspace_output 不再需要 type）
+            resolved = resolve_workspace_output(args.workspace_id, inp["path"], app_path)
             if resolved not in inputs:
                 inputs.append(resolved)
 
@@ -235,19 +235,16 @@ def main():
                 edge = fs_trans.get(args.on, {})
                 if isinstance(edge, dict):
                     for c in edge.get("carries", []):
-                        # carries 元素为 {path} dict（v8.4 删除了 type/name 死字段）
                         c_path = c if isinstance(c, str) else c["path"]
-                        resolved = resolve_workspace_output(args.workspace_id, c_path, app_path, "deliverable")
+                        resolved = resolve_workspace_output(args.workspace_id, c_path, app_path)
                         if resolved not in inputs:
                             inputs.append(resolved)
 
-        # 合并 output_targets（文档类）和 expected_outputs（schema）
-        # outputs 路径按 type 分流：deliverable → workspace，runtime → ws process 目录
+        # output_targets（v9.2: 删除 type 路径分流，统一解析）
         output_targets = []
         for o in reg.get("outputs", []):
             o_copy = dict(o)
-            output_type = o.get("type", "deliverable")
-            o_copy["path"] = resolve_workspace_output(args.workspace_id, o["path"], app_path, output_type)
+            o_copy["path"] = resolve_workspace_output(args.workspace_id, o["path"], app_path)
             output_targets.append(o_copy)
         expected_outputs = []
         checkpoint_id = f"ckpt_{uuid.uuid4().hex[:12]}"
@@ -323,10 +320,29 @@ def main():
         })
 
     if not dispatchable:
-        # v9.0 三态语义：区分「真正完成」/「路由失败」/「候选被过滤」（Bug 1+2 修复）
-        # 肯定式判定完成：所有 ROUTER step ∈ finished（不再用否定式推理）
-        all_steps = {s["step"] for s in steps}
-        if all_steps.issubset(finished) and not executing:
+        # v9.2 可达集闭合检查：从 entry 出发 BFS 沿已完成 step 的 verdict 边遍历。
+        # 条件路由 DAG 中未选择的分支（如回退路径、循环者）不影响完成判定。
+        # 替代原 v9.0 "全 step 完成" 检查（all_steps.issubset(finished)）。
+        entry = router.get("entry", "")
+        visited = set()
+        bfs_queue = [entry] if entry else []
+        while bfs_queue:
+            cur = bfs_queue.pop(0)
+            if cur in visited:
+                continue
+            visited.add(cur)
+            if cur not in finished:
+                continue
+            cur_verdict = completed_raw.get(cur, {}).get("verdict", "confirmed")
+            cur_def = steps_map.get(cur, {})
+            cur_trans = cur_def.get("transitions", {})
+            cur_edge = cur_trans.get(cur_verdict, {})
+            if isinstance(cur_edge, dict):
+                for t in cur_edge.get("targets", []):
+                    if t not in visited:
+                        bfs_queue.append(t)
+        reachable_unfinished = visited - finished
+        if not reachable_unfinished and not executing:
             output({"status": "success", "error_code": None, "message": "all_complete", "dispatch_instructions": []})
 
         # 路由失败：有 from_steps 但找不到目标（STATE 漂移 / verdict 无匹配边）

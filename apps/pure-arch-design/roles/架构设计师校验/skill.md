@@ -52,19 +52,11 @@
 
 ### 第 3 步：判定 verdict
 
-- **19 项全通过** → 根据响应记录内容 emit 对应业务 verdict（见下表）
+- **19 项全通过 + 无隐含需求标记** → `verdict = "blueprint_v1_ready"`
+- **19 项全通过 + 响应记录含 `unregistered_requirement` 标记** → `verdict = "unregistered_requirement"`
 - **任一项失败** → `verdict = "loop"`，失败项填入 findings
 
-**业务 verdict 判定逻辑**（校验角色需读取架构师的响应记录识别本轮场景）：
-
-| 场景 | 判定条件 | emit verdict |
-|------|---------|-------------|
-| v1 首次产出 | 响应记录均不存在或为占位 | `blueprint_v1_ready` |
-| R1 修订后复审 | R1-响应记录.json 新更新（其他响应记录未变动） | `r1_revised` |
-| R2 修订后复审 | R2-响应记录.json 新更新 | `r2_revised` |
-| R3 修订后复审 | R3-响应记录.json 新更新 | `r3_revised` |
-| R4 修订后复审 | R4-响应记录.json 新更新 | `r4_revised` |
-| 发现隐含需求 | 响应记录含 `unregistered_requirement` 标记 | `unregistered_requirement` |
+> **v4 设计说明**：校验角色不再区分"首次 v1"与"R{n} 修订后复审"——统一 emit `blueprint_v1_ready`，触发 4 红队全并行重跑（FORK 扇出）。原 `r1_revised` ~ `r4_revised` 选择性复审机制已在 v4 中删除（不存在于 app.yaml / registry.json / ROUTER.json）。
 
 ### 第 4 步：输出校验报告
 
@@ -76,11 +68,7 @@
 
 | emit verdict | 触发条件 | 路由目标 |
 |-------------|----------|----------|
-| `blueprint_v1_ready` | v1 首次产出 + 19 项全通过 | → 结构红队 R1 |
-| `r1_revised` | R1 修订完成 + 19 项全通过 | → 结构红队 R1 复审 |
-| `r2_revised` | R2 修订完成 + 19 项全通过 | → 边界红队 R2 复审 |
-| `r3_revised` | R3 修订完成 + 19 项全通过 | → 极限红队 R3 复审 |
-| `r4_revised` | R4 修订完成 + 19 项全通过 | → 质量红队 R4 复审 |
+| `blueprint_v1_ready` | 19 项全通过（首次产出 / R{n} 修订后 / consistency_defect 重跑均适用）| → [结构红队, 边界红队, 极限红队, 质量红队] 全并行 FORK 扇出 |
 | `unregistered_requirement` | 响应记录含隐含需求标记 + 19 项全通过 | → 终审裁决者审批 |
 | `loop` | 任一校验项失败 | → 架构设计师（携带 findings 修正） |
 

@@ -39,6 +39,17 @@ def _write_unlocked(state_path, state):
 
     调用者必须已持有 lock_path 文件锁。
     """
+    # v9.2 诊断日志：记录每次写入的调用者和 step_status 状态
+    import traceback as _tb, time as _time
+    _ws = os.path.basename(os.path.dirname(state_path))
+    _ss_keys = list((state.get("step_status") or {}).keys())
+    _completed_keys = list((state.get("completed") or {}).keys())
+    _caller = _tb.extract_stack()[-3] if len(_tb.extract_stack()) >= 3 else _tb.extract_stack()[-2]
+    _caller_info = f"{_caller.filename.split('/')[-1]}:{_caller.lineno} {_caller.name}"
+    _diag_line = f"[{_time.strftime('%H:%M:%S')}] WRITE_STATE ws={_ws} caller={_caller_info} step_status={_ss_keys} completed={_completed_keys}"
+    with open(state_path.replace("STATE.json", "_state_write.log"), "a") as _lf:
+        _lf.write(_diag_line + "\n")
+
     d = os.path.dirname(state_path)
     if d:
         os.makedirs(d, exist_ok=True)

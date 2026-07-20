@@ -49,6 +49,34 @@
 - **无降级输出权**：要么全过输出（passed）/ 要么回退架构师重跑（consistency_defect）/ 要么强制终止（terminated）
 - **无轮内仲裁权**：红队校验角色已承担仲裁职责，终审不再介入红队-架构师之间的对抗
 
+## 产物输出规则（双产物必产）
+
+本角色声明了 **2 个 outputs**，每次执行**必须同时产出两个文件**，不依赖 verdict 分支：
+
+| 产出物 | 路径 | 内容规则 |
+|--------|------|----------|
+| 终审裁决书 | `outputs/终审裁决书.json` | 每次必填完整内容（verdict + summary + 校验记录/审批记录）|
+| REQ-ID增补审批 | `process/outputs/REQ-ID增补审批.json` | 路径二（reqid_approved/reqid_rejected）时填完整审批内容；**路径一（passed/consistency_defect/terminated）时输出空对象 `{}`** |
+
+### 空对象示例（路径一执行时）
+
+```json
+{}
+```
+
+### 完整对象示例（路径二 reqid_approved 时）
+
+```json
+{
+  "new_req_id": "REQ-008",
+  "requirement_desc": "...",
+  "reasoning_chain": "...",
+  "decision": "approved"
+}
+```
+
+> **原因**：引擎 Gate 不支持按 verdict 分支产出不同文件集合，因此采用双产物必产策略，用空对象表示"本路径不适用"。
+
 ## verdict 判定规则
 
 ### 终态（从 all_passed 进入）
@@ -87,3 +115,6 @@
 - [ ] result.verdict ∈ 当前上下文 restrict_verdict 范围？
 - [ ] result.summary ≥ 50 字符？
 - [ ] 必需字段齐全？
+- [ ] **双产物都已输出**？
+  - 终审裁决书.json 已写入完整内容？
+  - REQ-ID增补审批.json 已写入（路径二完整内容 OR 路径一空对象 `{}`）？

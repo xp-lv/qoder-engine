@@ -5,7 +5,7 @@ Usage: python3 engine/scripts/init.py --workspace-path <path> --app-path <path> 
 import argparse, json, os, sys, shutil
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from session_path import (
-    resolve_ws_base, resolve_ws_state, resolve_ws_process,
+    resolve_ws_base, resolve_ws_state,
     derive_ws_id, get_app_name, get_edge_targets, resolve_workspace_output,
 )
 from state_io import save_state
@@ -167,27 +167,23 @@ def main():
     with open(app_ref_f, "w") as f:
         f.write(app_path)
 
-    # 写入 WORKSPACE_ROOT（必须在 process 目录创建之前写入，因为 resolve_ws_process 读它）
+    # 写入 WORKSPACE_ROOT
     ws_root_f = os.path.join(ws_base, "WORKSPACE_ROOT")
     with open(ws_root_f, "w") as f:
         f.write(os.path.abspath(args.workspace_path))
 
-    # 创建 process 目录（现在 resolve_ws_process 能正确读到 WORKSPACE_ROOT）
-    ws_process = resolve_ws_process(ws_id)
-    os.makedirs(ws_process, exist_ok=True)
+    # v9.2: 删除 process 目录创建（process 机制已废弃）
 
-    # 创建产出物目录（按 type 路由到正确位置，与 router.py/step.py 保持一致）
-    auto_dirs_resolved = set()  # 已解析的绝对路径
+    # 创建产出物目录（v9.2: 删除 type 路由，统一解析）
+    auto_dirs_resolved = set()
     for role in registry:
         for o in role.get("outputs", []):
-            o_type = o.get("type", "deliverable")
-            resolved = resolve_workspace_output(ws_id, o["path"], app_path, o_type)
+            resolved = resolve_workspace_output(ws_id, o["path"], app_path)
             out_dir = os.path.dirname(resolved)
             if out_dir:
                 auto_dirs_resolved.add(out_dir)
         for inp in role.get("inputs", []):
-            inp_type = inp.get("type", "deliverable")
-            resolved = resolve_workspace_output(ws_id, inp["path"], app_path, inp_type)
+            resolved = resolve_workspace_output(ws_id, inp["path"], app_path)
             inp_dir = os.path.dirname(resolved)
             if inp_dir:
                 auto_dirs_resolved.add(inp_dir)
@@ -197,36 +193,25 @@ def main():
         with open(manifest_path, "r", encoding="utf-8") as f:
             manifest = json.load(f)
         ws_template = manifest.get("workspace_template", {})
-        # manifest dirs 是相对路径，join workspace_path
         for dir_path in ws_template.get("dirs", []):
             full_dir = os.path.join(args.workspace_path, dir_path)
             os.makedirs(full_dir, exist_ok=True)
 
-    # auto_dirs_resolved 是按 type 解析后的绝对路径，直接创建
     for dir_path in auto_dirs_resolved:
         os.makedirs(dir_path, exist_ok=True)
 
-    # 为 inputs 创建占位骨架
-    # v8.3 重构：取消 type=process 机制，路径已显式（process/outputs/xxx.json 或 outputs/yyy.md）。
-    # v8.2 方案 D 仍然适用：.json 文件不创建占位符（避免 Qoder Write append 污染）。
-    # 只需按扩展名判断，与 type 字段无关。
+    # 为 inputs 创建占位骨架（v9.2: 不再读 type，按扩展名判断）
     for role in registry:
         for inp in role.get("inputs", []):
             inp_path = inp.get("path", "")
             if not inp_path:
                 continue
-            # v8.3: output_type 参数保留向后兼容，但已不影响路径 resolve
-            inp_type = inp.get("type", "deliverable")
-            full_path = resolve_workspace_output(ws_id, inp_path, app_path, inp_type)
+            full_path = resolve_workspace_output(ws_id, inp_path, app_path)
             if not os.path.exists(full_path):
                 os.makedirs(os.path.dirname(full_path), exist_ok=True)
-                # v8.2 方案 D：按扩展名决定占位符策略
                 _, ext = os.path.splitext(full_path)
                 if ext.lower() == '.json':
-                    # .json 文件不创建占位符，保持不存在状态
-                    # role-executor 用 Write 创建新文件（避免 append 污染）
                     continue
-                # .md 或其他文件：创建 markdown 占位符
                 inp_name = inp.get('name', inp_path)
                 placeholder = f"# {inp_name}\n\n（待填写）\n"
                 with open(full_path, "w", encoding="utf-8") as f:

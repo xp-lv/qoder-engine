@@ -25,7 +25,7 @@
    - **拒绝（reject）** → final_status=accepted_with_reason，必须给**机制级理由**（三类反证之一，详见《红队通用方法论》§5）：
      - 引用蓝图已有设计反证 / 引用 L2 REQ 边界反证 / 引用《严重度判定准则》反证
 3. 更新蓝图版本号 + 修订日志。
-4. emit `blueprint_v1_ready`（架构师是"无状态生产者"，始终只 emit 此单一 verdict；下游校验角色会读 R{n}-响应记录最新更新，自动 emit `r{n}_revised` 路由到对应红队 R{n} 复审）。
+4. emit `blueprint_v1_ready`（架构师是"无状态生产者"，始终只 emit 此单一 verdict；下游校验角色校验通过后同样 emit `blueprint_v1_ready`，触发 4 红队全并行复审）。
 
 ### 入口路径三：发现隐含需求
 
@@ -65,12 +65,12 @@
 
 | 入口场景 | emit verdict | 下游校验角色的判定 |
 |-----|-------------|----------|
-| v1 首次产出（路径一） | `blueprint_v1_ready` | 响应记录均为占位 → emit `blueprint_v1_ready` → 结构红队 R1 |
-| R{n} 修订后（路径二） | `blueprint_v1_ready` | R{n}-响应记录最新更新 → emit `r{n}_revised` → 对应红队 R{n} 复审 |
+| v1 首次产出（路径一） | `blueprint_v1_ready` | 校验通过 → emit `blueprint_v1_ready` → 4 红队全并行 |
+| R{n} 修订后（路径二） | `blueprint_v1_ready` | 校验通过 → emit `blueprint_v1_ready` → 4 红队全并行复审 |
 | 发现隐含需求（路径三） | `blueprint_v1_ready` | 响应记录含 `unregistered_requirement` → emit `unregistered_requirement` → 终审裁决者审批 |
-| consistency_defect 重跑（路径四） | `blueprint_v1_ready` | 同 v1 首次 → emit `blueprint_v1_ready` → 结构红队 R1 |
+| consistency_defect 重跑（路径四） | `blueprint_v1_ready` | 同 v1 首次 → emit `blueprint_v1_ready` → 4 红队全并行 |
 
-> ⚠️ **禁止 emit 其他 verdict**（如 `r1_revised` / `r2_revised` / `r3_revised` / `r4_revised` / `unregistered_requirement`）——这些 verdict 归属下游「架构设计师校验」角色，在 app.yaml / schema.json 中也未授予架构师。
+> ⚠️ **禁止 emit 其他 verdict**（如 `unregistered_requirement` / `loop`）——这些 verdict 归属下游「架构设计师校验」角色，在 app.yaml / schema.json 中也未授予架构师。
 
 ## 自检项
 

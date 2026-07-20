@@ -1,40 +1,12 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
-  "properties": {
-    "result": {
-      "type": "object",
-      "required": [
-        "verdict",
-        "summary"
-      ],
-      "properties": {
-        "verdict": {
-          "type": "string",
-          "enum": [
-            "confirmed"
-          ]
-        },
-        "summary": {
-          "type": "string"
-        },
-        "findings": {
-          "type": "array"
-        },
-        "errors": {
-          "type": "array"
-        }
-      }
-    }
-  },
-  "required": [
-    "result"
-  ],
+  "properties": {},
+  "required": [],
   "_required_files": [
     {
       "name": "R3问题清单",
-      "path": "process/outputs/R3-问题清单.json",
-      "type": "process"
+      "path": "process/outputs/R3-问题清单.json"
     }
   ]
 }

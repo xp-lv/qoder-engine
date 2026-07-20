@@ -403,12 +403,11 @@ def cmd_submit(args):
             reg_entry = next((r for r in registry_data if r.get("role_name") == role_name), None)
             if reg_entry:
                 for o in reg_entry.get("outputs", []):
-                    o_type = o.get("type", "deliverable")
-                    resolved = resolve_workspace_output(ws_id, o["path"], app_path, o_type)
+                    # v9.2: 删除 o_type 传递（resolve_workspace_output 已不接受 type 参数）
+                    resolved = resolve_workspace_output(ws_id, o["path"], app_path)
                     authoritative_outputs.append({
                         "name": o.get("name", ""),
                         "path": resolved,
-                        "type": o_type
                     })
     except Exception:
         pass  # 读取失败时回退到 role-executor 返回值
@@ -469,6 +468,12 @@ def cmd_submit(args):
     }
     if args.verdict:
         result_entry["verdict"] = args.verdict
+    # v9.2: 传递完整协议信封，供 Gate Layer 0 校验
+    if args.envelope:
+        try:
+            result_entry["envelope"] = json.loads(args.envelope)
+        except (json.JSONDecodeError, ValueError):
+            pass  # 非 JSON 时由 Gate Layer 0 自然报错
 
     extra = ["--state-path", state_path, "--app-path", app_path]
     if args.workspace_id:
@@ -646,6 +651,7 @@ def main():
     parser.add_argument("--dispatch-id", default=None, help="--submit: dispatch 唯一 ID（可选，未传入时自动从 STATE.json 定位）")
     parser.add_argument("--outputs", default=None, help="--submit: 产出物 JSON 数组 [{name, path}]")
     parser.add_argument("--verdict", default=None, help="--submit: 角色 verdict 值（从 role-executor 返回值读取）")
+    parser.add_argument("--envelope", default=None, help="--submit: 完整协议信封 JSON（v9.2，供 Gate Layer 0）")
 
     # --decide 参数
     parser.add_argument("--decisions", default=None, help="--decide: 用户决策 JSON 数组")

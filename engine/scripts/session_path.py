@@ -21,11 +21,7 @@ def resolve_ws_state(ws_id):
     return os.path.join(resolve_ws_base(ws_id), "STATE.json")
 
 
-def resolve_ws_process(ws_id):
-    ws_root = read_workspace_root(ws_id)
-    if ws_root:
-        return os.path.join(ws_root, "process")
-    return os.path.join(resolve_ws_base(ws_id), "process")
+# v9.2: resolve_ws_process 已删除（process 目录机制已废弃）
 
 
 def read_app_ref(ws_id):
@@ -52,15 +48,13 @@ def resolve_app_path(ws_id=None, explicit=None):
     raise ValueError("需要 ws_id 或 explicit app_path")
 
 
-def resolve_workspace_output(ws_id, relative_path, app_path=None, output_type="deliverable"):
+def resolve_workspace_output(ws_id, relative_path, app_path=None, output_type=None):
     """将 app.yaml 中的相对路径 resolve 为 workspace 绝对路径。
 
-    v8.3 重构：取消 type=process/runtime 的路径魔法前缀。
-    app.yaml 中的 path 是显式完整的相对路径（如 process/outputs/xxx.json 或 outputs/yyy.md），
-    此函数只负责拼接 workspace root，不再根据 type 推断前缀。
-
-    参数 output_type 保留向后兼容（调用方可继续传），但已不影响路径。
-    knowledge 类型仍然路由到 app_path（app 内置资源，不属于工作区）。
+    v9.2: 删除 type 前缀魔法与 output_type 参数语义。
+    产出物路径 = WORKSPACE_ROOT + app.yaml 声明的原路径。
+    参数 output_type 仅为向后兼容保留，不影响路径。
+    knowledge 类型仍需特殊路由到 app_path（app 内置资源）。
     """
     if output_type == "knowledge" and app_path:
         return os.path.join(app_path, relative_path)

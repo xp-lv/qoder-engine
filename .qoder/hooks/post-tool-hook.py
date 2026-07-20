@@ -410,10 +410,8 @@ def handle_role_executor_return(tool_output, workspace_id):
 
     sid_fallback = workspace_id or "default"
 
-    # v7.0: status 不再由 role-executor 显式写入，由 Hook② 根据返回内容自动推导。
-    # fail-safe 原则：默认 fail，仅在返回合法 JSON 且含关键字段时覆盖为 confirmed。
-    # 兼容：如果 role-executor 仍然显式写了 status，以显式值为准（向后兼容）。
-    # v7.0.1: required_keys 从 ["status"] 改为 ["step"]，确保匹配协议信封而非产出物内容 JSON。
+    # v9.2: Hook② 只做 JSON 提取（数据依赖硬约束）
+    # 信封字段（status/verdict/outputs 结构）校验统一交给 Gate Layer 0
     data = extract_json_from_text(tool_output, required_keys=["step"])
     if not data:
         # role-executor 返回非 JSON（Task 被取消/崩溃/超时）
@@ -427,45 +425,20 @@ def handle_role_executor_return(tool_output, workspace_id):
     role_verdict = data.get("verdict", "")
     step = data.get("step", "")
 
-    # ── v7.0: status 自动推导（fail-safe: 默认 fail）──
-    # status 是 role-executor 的协议信封顶层字段，用于声明执行是否成功跑完。
-    # 合法值只有 "confirmed"（执行完整结束）和 "BLOCKING"（主动阻塞）。
-    # 其他值（如 "success"/"error" 等）或缺失都视为执行层失败。
+    # v9.2: 保留 status=BLOCKING 的短路检查（角色主动阻塞）
+    # 其余信封字段（verdict 合法性/status 值/outputs 结构）交给 Gate Layer 0
     explicit_status = data.get("status", "")
     if explicit_status == "BLOCKING":
-        # BLOCKING 是角色有意阻塞，不自动清理，由用户通过 jump 显式恢复
         emit(f"BLOCKING：role-executor 返回 BLOCKING。向用户报告以下信息：\n{json.dumps(data, ensure_ascii=False)[:500]}")
         return
-    if explicit_status and explicit_status not in ("confirmed", "BLOCKING"):
-        # 显式写了非 confirmed/BLOCKING 的 status → 异常（如 role-executor 误写 "success"）
-        emit(f"BLOCKING：role-executor 返回异常状态 '{explicit_status}'。合法值仅为 confirmed/BLOCKING，请检查 role-executor.md 规范。")
-        return
 
-    # fail-safe 推导：status 默认 fail，以下条件全部满足才覆盖为 confirmed
-    # 1) 显式写了 status=confirmed（向后兼容），或
-    # 2) 未写 status 但返回了合法 JSON 且含 step + (verdict 或 result.verdict)
-    has_step = bool(step)
-    has_verdict = bool(role_verdict) or bool(data.get("result", {}).get("verdict", ""))
-    if explicit_status == "confirmed":
-        status = "confirmed"
-    elif not explicit_status and has_step and has_verdict:
-        # role-executor 未写 status 但返回了完整数据 → 推导为 confirmed
-        status = "confirmed"
-    else:
-        status = "fail"
-
-    if status == "fail":
-        # fail-safe：推导后仍为 fail → 不自动清理，由用户通过 jump 恢复
-        reason = "返回 JSON 缺少关键字段（step/verdict）且未显式声明 status=confirmed"
-        emit(f"BLOCKING：role-executor 执行结果无法确认为成功。原因：{reason}。向用户报告此问题。如需恢复，请使用 jump 回到正常状态。")
-        return
-
-    # ── 调 step.py --submit ──
+    # ── 调 step.py --submit（传完整 envelope 给 Gate Layer 0）──
     _hook2_log(f"SUBMIT: step={step} verdict={role_verdict} outputs={json.dumps(outputs, ensure_ascii=False)[:200]}")
     submit_args = [
         "engine/scripts/step.py", "--submit",
         "--step", step,
         "--outputs", json.dumps(outputs, ensure_ascii=False),
+        "--envelope", json.dumps(data, ensure_ascii=False),  # v9.2: 传完整信封
         "--workspace-id", sid,
     ]
     if role_verdict:

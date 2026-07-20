@@ -76,12 +76,7 @@
           "targets": [
             "架构设计师校验"
           ],
-          "type": "normal",
-          "carries": [
-            {
-              "path": "outputs/架构设计师-gate-result.json"
-            }
-          ]
+          "type": "normal"
         },
         "fail": {
           "targets": [
@@ -125,18 +120,7 @@
             "极限红队",
             "质量红队"
           ],
-          "type": "normal",
-          "carries": [
-            {
-              "path": "outputs/架构蓝图.md"
-            },
-            {
-              "path": "outputs/需求规格文档.md"
-            },
-            {
-              "path": "outputs/架构设计师校验-gate-result.json"
-            }
-          ]
+          "type": "normal"
         },
         "unregistered_requirement": {
           "targets": [
@@ -169,33 +153,7 @@
           "targets": [
             "红队校验角色"
           ],
-          "type": "normal",
-          "carries": [
-            {
-              "path": "process/outputs/R1-问题清单.json"
-            },
-            {
-              "path": "process/outputs/R2-问题清单.json"
-            },
-            {
-              "path": "process/outputs/R3-问题清单.json"
-            },
-            {
-              "path": "process/outputs/R4-问题清单.json"
-            },
-            {
-              "path": "outputs/结构红队-gate-result.json"
-            },
-            {
-              "path": "outputs/边界红队-gate-result.json"
-            },
-            {
-              "path": "outputs/极限红队-gate-result.json"
-            },
-            {
-              "path": "outputs/质量红队-gate-result.json"
-            }
-          ]
+          "type": "normal"
         },
         "fail": {
           "targets": [
@@ -222,33 +180,7 @@
           "targets": [
             "红队校验角色"
           ],
-          "type": "normal",
-          "carries": [
-            {
-              "path": "process/outputs/R1-问题清单.json"
-            },
-            {
-              "path": "process/outputs/R2-问题清单.json"
-            },
-            {
-              "path": "process/outputs/R3-问题清单.json"
-            },
-            {
-              "path": "process/outputs/R4-问题清单.json"
-            },
-            {
-              "path": "outputs/结构红队-gate-result.json"
-            },
-            {
-              "path": "outputs/边界红队-gate-result.json"
-            },
-            {
-              "path": "outputs/极限红队-gate-result.json"
-            },
-            {
-              "path": "outputs/质量红队-gate-result.json"
-            }
-          ]
+          "type": "normal"
         },
         "fail": {
           "targets": [
@@ -275,33 +207,7 @@
           "targets": [
             "红队校验角色"
           ],
-          "type": "normal",
-          "carries": [
-            {
-              "path": "process/outputs/R1-问题清单.json"
-            },
-            {
-              "path": "process/outputs/R2-问题清单.json"
-            },
-            {
-              "path": "process/outputs/R3-问题清单.json"
-            },
-            {
-              "path": "process/outputs/R4-问题清单.json"
-            },
-            {
-              "path": "outputs/结构红队-gate-result.json"
-            },
-            {
-              "path": "outputs/边界红队-gate-result.json"
-            },
-            {
-              "path": "outputs/极限红队-gate-result.json"
-            },
-            {
-              "path": "outputs/质量红队-gate-result.json"
-            }
-          ]
+          "type": "normal"
         },
         "fail": {
           "targets": [
@@ -328,33 +234,7 @@
           "targets": [
             "红队校验角色"
           ],
-          "type": "normal",
-          "carries": [
-            {
-              "path": "process/outputs/R1-问题清单.json"
-            },
-            {
-              "path": "process/outputs/R2-问题清单.json"
-            },
-            {
-              "path": "process/outputs/R3-问题清单.json"
-            },
-            {
-              "path": "process/outputs/R4-问题清单.json"
-            },
-            {
-              "path": "outputs/结构红队-gate-result.json"
-            },
-            {
-              "path": "outputs/边界红队-gate-result.json"
-            },
-            {
-              "path": "outputs/极限红队-gate-result.json"
-            },
-            {
-              "path": "outputs/质量红队-gate-result.json"
-            }
-          ]
+          "type": "normal"
         },
         "fail": {
           "targets": [
@@ -381,15 +261,7 @@
           "targets": [
             "终审裁决者"
           ],
-          "type": "normal",
-          "carries": [
-            {
-              "path": "process/outputs/红队综合裁决.json"
-            },
-            {
-              "path": "outputs/红队校验角色-gate-result.json"
-            }
-          ]
+          "type": "normal"
         },
         "issues_found": {
           "targets": [

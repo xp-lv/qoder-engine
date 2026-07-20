@@ -112,7 +112,7 @@ def validate_app_yaml(roles, edges):
                     warnings.append(f"角色 '{name}': 未知字段 '{field}'（合法字段: {sorted(VALID_ROLE_FIELDS)}）")
 
     # ── 3. 路径校验 ──
-    VALID_TYPES = {'deliverable', 'process'}
+    # v9.2: 删除 VALID_TYPES（type 字段已废弃）
     for name, data in roles.items():
         if not isinstance(data, dict):
             continue
@@ -126,10 +126,6 @@ def validate_app_yaml(roles, edges):
                 # 路径不能含 ..
                 if '..' in path:
                     errors.append(f"角色 '{name}': {key} 项 '{item_name}' 路径含 '..'（不允许路径穿越）")
-                # type 值校验
-                item_type = item.get('type', 'deliverable')
-                if item_type not in VALID_TYPES:
-                    warnings.append(f"角色 '{name}': {key} 项 '{item_name}' type='{item_type}' 不是合法值（合法: {sorted(VALID_TYPES)}）")
 
     # ── 4. edges 中引用的角色是否存在 ──
     for e in edges:
@@ -306,17 +302,16 @@ def compile_app(app_path, force=False):
                     if current_list_key and ':' in item_str:
                         # 简单格式: - 名称: 路径
                         nm = item_str.split(':', 1)[0].strip().strip('"\'')
-                        rest = item_str.split(':', 1)[1].strip().strip('"\'')
-                        # v8.3: 取消 type=process 声明，从路径前缀推断 type
-                        # 忽略逗号后的旧式 type=xxx（向后兼容）
+                        rest = item_str.split(':', 1)[1].strip().strip("\'")
+                        # v9.2: 删除 type 推断，路径原样保留（type 字段已废弃）
+                        # 向后兼容：忽略逗号后的旧式 type=xxx
                         if ',' in rest:
-                            pt = rest.split(',', 1)[0].strip().strip('"\'')
+                            pt = rest.split(',', 1)[0].strip().strip("\'")
                         else:
                             pt = rest
-                        item_type = 'process' if pt.startswith('process/') else 'deliverable'
-                        roles[current_role][current_list_key].append({"name": nm, "path": pt, "type": item_type})
+                        roles[current_role][current_list_key].append({"name": nm, "path": pt})
                     elif current_list_key:
-                        roles[current_role][current_list_key].append({"name": item_str.strip('"\''), "path": item_str.strip('"\''), "type": "deliverable"})
+                        roles[current_role][current_list_key].append({"name": item_str.strip("\'"), "path": item_str.strip("\'")})
 
     if not roles:
         print("错误：app.yaml 中没有角色定义")
@@ -744,30 +739,16 @@ def compile_app(app_path, force=False):
             with open(skill_f, "w", encoding="utf-8") as f:
                 f.write(f"# {r} 执行指令\n\n## 执行步骤\n1. （待填充）\n\n## 产出物\n（待填充）\n")
 
-        # schema.json 是派生文件（verdict enum + _required_files 从 app.yaml 编译得出），
+        # schema.json 是派生文件（_required_files 从 app.yaml 编译得出），
         # 普通编译和 --force 编译都全量重新生成（与 ROUTER.json 一致）。
+        # v9.2: 删除 result.verdict enum（信封字段由 Gate Layer 0 从 ROUTER.json transitions 读取）
         schema_f = os.path.join(role_full, "schema.json")
         schema = {"$schema": "http://json-schema.org/draft-07/schema#", "type": "object", "properties": {}, "required": []}
-        # verdicts 从 edges 提取（与 registry 写入保持一致），不从角色级 verdicts 读
-        verdicts = sorted(role_edge_verdicts.get(r, set()))
-        if verdicts:
-            # 条件路由角色：自动写入 result.verdict enum
-            schema["required"] = ["result"]
-            schema["properties"]["result"] = {
-                "type": "object",
-                "required": ["verdict", "summary"],
-                "properties": {
-                    "verdict": {"type": "string", "enum": verdicts},
-                    "summary": {"type": "string"},
-                    "findings": {"type": "array"},
-                    "errors": {"type": "array"}
-                }
-            }
 
-        # 写入产出物文件要求（Gate 据此检查文件是否存在+新鲜）
-        # P1 (v8.2): schema 分层——_required_files 保留手写的 contract 字段（merge 语义）
-        # name/path/type 仍从 app.yaml 派生（单源权威），contract 是可选的细粒度校验声明，
-        # 由开发者手动写在 schema.json 里。compiler 重新生成时保留已有 contract 不覆盖。
+        # 写入产出物文件要求（Gate Layer 1 据此检查文件是否存在）
+        # v9.2: 删除 type 字段（type 区分已废弃）
+        # contract 是可选的细粒度校验声明，由开发者手动写在 schema.json 里。
+        # compiler 重新生成时保留已有 contract 不覆盖。
         outputs = role_data.get("outputs", [])
         if outputs:
             # 读取已有 schema.json 的 _required_files（用于保留手写 contract）
@@ -789,7 +770,6 @@ def compile_app(app_path, force=False):
                 rf_entry = {
                     "name": name,
                     "path": o.get("path", ""),
-                    "type": o.get("type", "deliverable")
                 }
                 # P1: 保留已有 contract 字段（手写的深度校验规则）
                 existing = existing_rf_map.get(name, {})

@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-"""Gate — 产出物格式异常隔离层。
+"""Gate — 统一两阶段校验器。
 
-唯一职责：检查产出物是否存在、是否有内容、是否符合格式契约。
-不关心产出物的语义内容（verdict 值由 orchestrator 自己读）。
+Layer 0: 协议信封校验（--mode envelope）
+  校验 role-executor 返回值的格式契约（step/verdict/status/outputs）。
+  失败 → ENVELOPE_FAIL → BLOCKING（协议违规，不走 fail 边）。
+  verdict 合法性权威源：ROUTER.json 的 transitions keys。
 
-所有产出物走三层逻辑：
-1. 物理检查（统一，不区分产物类型）
-2. 二进制文件短路（扩展名匹配 → 仅物理检查即 PASS）
-3. 文本解析（JSON 直接校验，非 JSON 包装为 {"_raw_text": ...} 后校验）
+Layer 1: 产出物文件校验（--mode file，默认）
+  校验磁盘产出物文件的存在性 + 非空 + 二进制短路 + 可选 contract。
+  失败 → FAIL → 走 fail 边（质量问题，可自动重试）。
 
-Usage: python3 engine/scripts/gate.py --step <STEP> --output-path <path> --app-path <path> [--workspace-id <id>]
+Usage:
+  python3 engine/scripts/gate.py --mode envelope --step <STEP> --envelope <json> --app-path <path>
+  python3 engine/scripts/gate.py --mode file --step <STEP> --output-path <path> --app-path <path> [--workspace-id <id>]
 """
 import argparse, json, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -86,6 +89,54 @@ def validate_schema(data, schema):
     return errors
 
 
+def validate_envelope(envelope, step_def):
+    """Gate Layer 0: 协议信封校验。
+
+    校验 role-executor 返回值的格式契约。
+    失败 → ENVELOPE_FAIL（BLOCKING，不走 fail 边）。
+
+    权威源：ROUTER.json 的 transitions keys（天然包含所有合法 verdict）。
+    """
+    errors = []
+
+    # 1. step 字段必须存在
+    step = envelope.get("step", "")
+    if not step:
+        errors.append("信封缺少 step 字段")
+        return errors
+
+    # 2. verdict 合法性（权威源：ROUTER.json transitions）
+    verdict = envelope.get("verdict", "")
+    if verdict:
+        transitions = step_def.get("transitions", {}) if step_def else {}
+        # 合法 verdict = transitions keys（排除系统保留词 fail）
+        legal_verdicts = set(transitions.keys()) - {"fail"}
+        # 无条件出边会被编译器写入 confirmed，故 confirmed 始终合法
+        legal_verdicts.add("confirmed")
+        if verdict not in legal_verdicts:
+            errors.append(f"verdict '{verdict}' 不在合法集合 {sorted(legal_verdicts)} 中")
+
+    # 3. status 字段（可选：仅 confirmed/BLOCKING 合法）
+    status = envelope.get("status", "")
+    if status and status not in ("confirmed", "BLOCKING"):
+        errors.append(f"status '{status}' 不合法（仅允许 confirmed 或 BLOCKING）")
+
+    # 4. outputs 结构校验（必须是数组，每项可以是字符串路径或 {path: "..."} 对象）
+    outputs = envelope.get("outputs", [])
+    if not isinstance(outputs, list):
+        errors.append("outputs 必须是数组")
+    else:
+        for i, o in enumerate(outputs):
+            if isinstance(o, str):
+                continue  # 字符串路径合法
+            if not isinstance(o, dict):
+                errors.append(f"outputs[{i}] 必须是字符串或对象")
+            elif "path" not in o:
+                errors.append(f"outputs[{i}] 缺少 path 字段")
+
+    return errors
+
+
 def validate_deliverable_contract(file_path, raw_content, contract):
     """P1 (v8.2): 对 deliverable 产出物做深度校验。
 
@@ -125,22 +176,62 @@ def validate_deliverable_contract(file_path, raw_content, contract):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Gate 产出物校验")
+    parser = argparse.ArgumentParser(description="Gate 统一两阶段校验器")
+    parser.add_argument("--mode", default="file", choices=["envelope", "file"],
+                        help="envelope=信封校验(Layer 0);file=文件校验(Layer 1,默认)")
     parser.add_argument("--step", required=True)
-    parser.add_argument("--output-path", required=True)
+    parser.add_argument("--output-path", default=None, help="file 模式:产出物路径")
+    parser.add_argument("--envelope", default=None, help="envelope 模式:完整信封 JSON")
     parser.add_argument("--state-path", default=None)
     parser.add_argument("--app-path", default=None)
     parser.add_argument("--workspace-id", default=None)
     args = parser.parse_args()
 
     app_path = args.app_path or resolve_app_path(args.workspace_id)
-    state_path = args.state_path or resolve_ws_state(args.workspace_id)
+    # v9.2: state_path 延迟到 file 模式才解析（envelope 模式不需要 state）
+    state_path = args.state_path
+    if state_path is None and args.workspace_id:
+        try:
+            state_path = resolve_ws_state(args.workspace_id)
+        except Exception:
+            state_path = None
+
+    # ── 加载 ROUTER.json（两种模式都需要查找 step_def）──
+    router_path = os.path.join(app_path, "ROUTER.json")
+    router = {}
+    if os.path.exists(router_path):
+        with open(router_path, "r", encoding="utf-8") as f:
+            router = json.load(f)
+    step_def = next((s for s in router.get("steps", []) if s["step"] == args.step), None)
+
+    # ════════════════════════════════════════════════════════════
+    # Layer 0: 协议信封校验（--mode envelope）
+    # 失败 → ENVELOPE_FAIL → BLOCKING（不走 fail 边）
+    # ════════════════════════════════════════════════════════════
+    if args.mode == "envelope":
+        if not args.envelope:
+            output({"verdict": "ENVELOPE_FAIL", "errors": ["--mode envelope 需要 --envelope 参数"]})
+        try:
+            envelope = json.loads(args.envelope)
+        except (json.JSONDecodeError, ValueError) as e:
+            output({"verdict": "ENVELOPE_FAIL", "errors": [f"envelope 不是有效 JSON: {e}"]})
+        errors = validate_envelope(envelope, step_def)
+        if errors:
+            output({"verdict": "ENVELOPE_FAIL", "errors": errors})
+        output({"verdict": "PASS", "errors": []})
+
+    # ════════════════════════════════════════════════════════════
+    # Layer 1: 产出物文件校验（--mode file，默认）
+    # 失败 → FAIL → 走 fail 边（质量问题，可重试）
+    # ════════════════════════════════════════════════════════════
+    if not args.output_path:
+        fail("--mode file 需要 --output-path 参数")
 
     # ── 1. 物理检查（统一，不区分产物类型）──
     if not os.path.exists(args.output_path):
         fail(f"产出物文件不存在: {args.output_path}")
 
-    # 目录类型产出物（producer 代码目录等）：检查存在且非空即 PASS
+    # 目录类型产出物：检查存在且非空即 PASS
     if os.path.isdir(args.output_path):
         dir_contents = os.listdir(args.output_path)
         if not dir_contents:
@@ -151,8 +242,6 @@ def main():
         fail(f"产出物文件为空: {args.output_path}")
 
     # ── 2. 二进制文件短路：物理检查通过即 PASS ──
-    # 二进制产出物（截图、图标、字体等）无法以 UTF-8 文本解析，
-    # 也不需要 schema 校验。物理检查（存在+非空）已足够。
     BINARY_EXTENSIONS = {
         '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.webp', '.svg',
         '.woff', '.woff2', '.ttf', '.eot', '.pdf', '.zip', '.tar', '.gz',
@@ -162,54 +251,42 @@ def main():
         output({"verdict": "PASS", "errors": []})
 
     # ── 3. 统一解析：JSON 直接用，非 JSON 包装 ──
-    # 对文本文件先以二进制读取，再解码为 UTF-8，避免解码异常导致脚本崩溃
     with open(args.output_path, "rb") as bf:
         raw_bytes = bf.read()
     try:
         raw = raw_bytes.decode("utf-8")
     except (UnicodeDecodeError, ValueError):
-        # 无法解码为 UTF-8 的非二进制扩展名文件 → 物理检查通过即 PASS
+        # 无法解码为 UTF-8 → 物理检查通过即 PASS
         output({"verdict": "PASS", "errors": []})
     try:
         data = json.loads(raw)
     except (json.JSONDecodeError, ValueError):
         data = {"_raw_text": raw}
 
-    # ── 4. 查找角色的 schema ──
-    router_path = os.path.join(app_path, "ROUTER.json")
+    # ── 4. 查找 step / role（用于定位 schema）──
     reg_path = os.path.join(app_path, "registry.json")
-    if not os.path.exists(router_path) or not os.path.exists(reg_path):
+    if not os.path.exists(reg_path):
         # 无配置文件 → 只做物理检查（已有内容即 PASS）
         output({"verdict": "PASS", "errors": []})
 
-    with open(router_path, "r", encoding="utf-8") as f:
-        router = json.load(f)
     with open(reg_path, "r", encoding="utf-8") as f:
         registry = json.load(f)
 
-    step_entry = next((s for s in router.get("steps", []) if s["step"] == args.step), None)
-    if not step_entry:
+    if not step_def:
         fail(f"STEP {args.step} 不在 ROUTER.json 中")
 
-    role_name = step_entry["role"]
+    role_name = step_def["role"]
     role_record = next((r for r in registry if r.get("role_name") == role_name), None)
     if not role_record:
         fail(f"角色 {role_name} 不在 registry.json 中")
 
-    # ── 5. Schema 校验（从 roles 目录加载）──
-    role_dir_name = step_entry.get("role", "")
-    # slugify 角色名查找 schema
+    # ── 5. 深度契约校验（可选 contract，不再区分 type）──
     import re
-    schema_dir = re.sub(r'[^\w\u4e00-\u9fff]', '_', role_dir_name)
+    schema_dir = re.sub(r'[^\w\u4e00-\u9fff]', '_', role_name)
     schema_file = os.path.join(app_path, "roles", schema_dir, "schema.json")
 
     errors = []
-
-    # P1 (v8.2): 先加载 schema 并查找当前 output_path 的 type + contract
-    # 这样 markdown/JSON 都能走到 contract 校验（避免 is_non_json 分支跳过 contract）
-    output_type = "deliverable"
     rf_contract = None
-    schema = None
     if os.path.exists(schema_file):
         try:
             with open(schema_file, "r", encoding="utf-8") as f:
@@ -218,60 +295,15 @@ def main():
             for rf in schema.get("_required_files", []):
                 rf_path = rf.get("path", "").replace("\\", "/").rstrip("/")
                 if rf_path and (norm_output.endswith(rf_path) or rf_path.endswith(norm_output)):
-                    output_type = rf.get("type", "deliverable")
                     rf_contract = rf.get("contract")
                     break
         except Exception as e:
             errors.append(f"schema 加载失败: {e}")
 
-    # 非 JSON 产出物：物理检查 + contract 校验（跳过 result schema）
-    is_non_json = ("_raw_text" in data)
-
-    if is_non_json:
-        # 非 JSON：跳过 result schema，但若有 contract 则做深度校验
-        if rf_contract:
-            errors.extend(validate_deliverable_contract(args.output_path, raw, rf_contract))
-    elif schema is not None:
-        # JSON：做 schema 校验
-        try:
-            # 按 type 分发：process 跳过 result schema，deliverable 完整校验
-            if output_type == "process":
-                # process 类型：最小校验（物理检查已通过 + JSON 可解析已成功），跳过 result schema
-                # result 契约是角色整体响应包契约，由 Hook② 在协议层校验，Gate 不重复
-                pass
-            else:
-                # deliverable 类型：走完整的 schema 校验
-                # 上下文感知 verdict enum 替换：
-                # 若 ROUTER.json 中该 step 有 verdict_context 且 STATE.json 中记录了 from_steps，
-                # 则用过滤后的 enum 替换 schema 中的全量 enum
-                step_verdict_context = step_entry.get("verdict_context")
-                if step_verdict_context:
-                    try:
-                        with open(state_path, "r", encoding="utf-8") as sf:
-                            state_data = json.load(sf)
-                        step_ss = state_data.get("step_status", {}).get(args.step, {})
-                        dispatch_from = step_ss.get("from_steps", [])
-                        for fs in dispatch_from:
-                            if fs in step_verdict_context:
-                                filtered = step_verdict_context[fs]
-                                try:
-                                    schema["properties"]["result"]["properties"]["verdict"]["enum"] = filtered
-                                except (KeyError, TypeError):
-                                    pass
-                                break
-                    except (json.JSONDecodeError, ValueError, IOError):
-                        pass
-
-                errors = validate_schema(data, schema)
-
-                # P1: 若有手写 contract，补加 deliverable 深度校验
-                if rf_contract:
-                    errors.extend(validate_deliverable_contract(args.output_path, raw, rf_contract))
-        except Exception as e:
-            errors.append(f"schema 处理异常: {e}")
-    else:
-        # JSON 但无 schema → 物理检查通过即 PASS
-        pass
+    # 统一 contract 校验（不再按 type 分发，不再校验 result schema）
+    # result.verdict 等信封字段已由 Layer 0 校验，文件只做物理检查 + 可选 contract
+    if rf_contract:
+        errors.extend(validate_deliverable_contract(args.output_path, raw, rf_contract))
 
     # ── 6. 返回 ──
     if errors:
