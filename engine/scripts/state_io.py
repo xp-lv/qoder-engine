@@ -119,6 +119,13 @@ def state_txn(state_path, timeout=60):
         finally:
             # 异常路径：跳过 _write_unlocked，磁盘状态保持不变
             release_lock(lock_file)
+            # v9.2: 删除锁文件，避免残留文件导致后续 state_txn 误判
+            # （fcntl.flock 是进程级锁，进程退出自动释放，但锁文件残留会
+            # 让 open(lock_path, "w") 截断时与其他进程产生竞争）
+            try:
+                os.unlink(lock_path)
+            except OSError:
+                pass
 
 
 def modify_state_locked(state_path, modifier_fn, timeout=60):
