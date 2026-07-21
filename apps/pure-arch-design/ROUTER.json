@@ -17,7 +17,7 @@
             "需求分析师"
           ],
           "type": "backward",
-          "max_executions": 3,
+          "max_executions": 5,
           "carries": [
             {
               "path": "outputs/需求规格文档.md"
@@ -56,7 +56,7 @@
             "需求分析师校验"
           ],
           "type": "backward",
-          "max_executions": 3,
+          "max_executions": 5,
           "carries": [
             {
               "path": "process/outputs/需求分析师-validation.json"
@@ -83,7 +83,7 @@
             "架构设计师"
           ],
           "type": "backward",
-          "max_executions": 3,
+          "max_executions": 5,
           "carries": [
             {
               "path": "outputs/架构蓝图.md"
@@ -133,7 +133,7 @@
             "架构设计师校验"
           ],
           "type": "backward",
-          "max_executions": 3,
+          "max_executions": 5,
           "carries": [
             {
               "path": "process/outputs/架构设计师-validation.json"
@@ -160,7 +160,7 @@
             "结构红队"
           ],
           "type": "backward",
-          "max_executions": 3,
+          "max_executions": 5,
           "carries": [
             {
               "path": "process/outputs/R1-问题清单.json"
@@ -187,7 +187,7 @@
             "边界红队"
           ],
           "type": "backward",
-          "max_executions": 3,
+          "max_executions": 5,
           "carries": [
             {
               "path": "process/outputs/R2-问题清单.json"
@@ -214,7 +214,7 @@
             "极限红队"
           ],
           "type": "backward",
-          "max_executions": 3,
+          "max_executions": 5,
           "carries": [
             {
               "path": "process/outputs/R3-问题清单.json"
@@ -241,7 +241,7 @@
             "质量红队"
           ],
           "type": "backward",
-          "max_executions": 3,
+          "max_executions": 5,
           "carries": [
             {
               "path": "process/outputs/R4-问题清单.json"
@@ -291,7 +291,7 @@
             "红队校验角色"
           ],
           "type": "backward",
-          "max_executions": 3,
+          "max_executions": 5,
           "carries": [
             {
               "path": "process/outputs/红队综合裁决.json"
@@ -364,7 +364,7 @@
             "终审裁决者"
           ],
           "type": "backward",
-          "max_executions": 3,
+          "max_executions": 5,
           "carries": [
             {
               "path": "outputs/终审裁决书.json"

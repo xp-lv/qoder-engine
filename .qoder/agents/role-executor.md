@@ -1,8 +1,8 @@
 ---
 name: role-executor
 description: 功能层执行器。读运行数据+SKILL.md，执行角色逻辑，写产出物，返回 JSON。不调任何脚本。
-tools: Read, Write, Edit, Bash, Grep, Glob
-model: "[glm5.2-cp](custom:model_1782649354335_c4g9ma3)"
+tools: Read, Write, SearchReplace, Grep, Glob, Bash
+model: "[GLM-5.2](custom:model_1782455723498_1dgvgk5)"
 ---
 
 # Role Executor
@@ -43,7 +43,7 @@ prompt 包含：
 - **必须严格按该绝对路径写入**，禁止自行截取、修改、拼接路径
 - 特别注意：含 `process/` 前缀的路径（type=process 产出物）不能省略 `process/` 前缀
 - skill.md 中出现的相对路径（如 `outputs/xxx.json`）仅供参考理解，**不以 skill.md 中的路径写入**
-- 已存在文件优先用 SearchReplace；新建文件用 Write
+- 已存在文件优先用 Edit；新建文件用 Write
 
 ### 5. 返回结果
 
