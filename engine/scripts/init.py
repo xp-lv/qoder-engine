@@ -175,15 +175,20 @@ def main():
     # v9.2: 删除 process 目录创建（process 机制已废弃）
 
     # 创建产出物目录（v9.2: 删除 type 路由，统一解析）
+    # 同时处理 path（相对）和 abs_path（绝对）
     auto_dirs_resolved = set()
     for role in registry:
         for o in role.get("outputs", []):
-            resolved = resolve_workspace_output(ws_id, o["path"], app_path)
+            is_abs = bool(o.get("abs_path"))
+            raw_path = o.get("abs_path") or o["path"]
+            resolved = resolve_workspace_output(ws_id, raw_path, app_path, is_absolute=is_abs)
             out_dir = os.path.dirname(resolved)
             if out_dir:
                 auto_dirs_resolved.add(out_dir)
         for inp in role.get("inputs", []):
-            resolved = resolve_workspace_output(ws_id, inp["path"], app_path)
+            is_abs = bool(inp.get("abs_path"))
+            raw_path = inp.get("abs_path") or inp["path"]
+            resolved = resolve_workspace_output(ws_id, raw_path, app_path, is_absolute=is_abs)
             inp_dir = os.path.dirname(resolved)
             if inp_dir:
                 auto_dirs_resolved.add(inp_dir)
@@ -201,12 +206,14 @@ def main():
         os.makedirs(dir_path, exist_ok=True)
 
     # 为 inputs 创建占位骨架（v9.2: 不再读 type，按扩展名判断）
+    # 已有的 os.path.exists 检查确保不会覆盖外部代码库中的已有文件
     for role in registry:
         for inp in role.get("inputs", []):
-            inp_path = inp.get("path", "")
+            is_abs = bool(inp.get("abs_path"))
+            inp_path = inp.get("abs_path") or inp.get("path", "")
             if not inp_path:
                 continue
-            full_path = resolve_workspace_output(ws_id, inp_path, app_path)
+            full_path = resolve_workspace_output(ws_id, inp_path, app_path, is_absolute=is_abs)
             if not os.path.exists(full_path):
                 os.makedirs(os.path.dirname(full_path), exist_ok=True)
                 _, ext = os.path.splitext(full_path)

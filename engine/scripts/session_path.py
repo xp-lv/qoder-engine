@@ -48,20 +48,29 @@ def resolve_app_path(ws_id=None, explicit=None):
     raise ValueError("需要 ws_id 或 explicit app_path")
 
 
-def resolve_workspace_output(ws_id, relative_path, app_path=None, output_type=None):
-    """将 app.yaml 中的相对路径 resolve 为 workspace 绝对路径。
+def resolve_workspace_output(ws_id, path, app_path=None, output_type=None, is_absolute=False):
+    """将 app.yaml 中的路径 resolve 为绝对路径。
+
+    两种路径模式（由 app.yaml 显式声明，不做自动推断）：
+    1. path: 相对路径（如 outputs/test.md）→ WORKSPACE_ROOT + path
+    2. abs_path: 绝对路径（如 /Users/xxx/project/src/main.py）→ 直接返回
+       调用方传 is_absolute=True，函数不做拼接。
 
     v9.2: 删除 type 前缀魔法与 output_type 参数语义。
-    产出物路径 = WORKSPACE_ROOT + app.yaml 声明的原路径。
     参数 output_type 仅为向后兼容保留，不影响路径。
     knowledge 类型仍需特殊路由到 app_path（app 内置资源）。
     """
     if output_type == "knowledge" and app_path:
-        return os.path.join(app_path, relative_path)
+        return os.path.join(app_path, path)
+    
+    # 显式声明的绝对路径，直接返回
+    if is_absolute:
+        return path
+    
     ws_root = read_workspace_root(ws_id)
     if ws_root:
-        return os.path.join(ws_root, relative_path)
-    return os.path.join(resolve_ws_base(ws_id), relative_path)
+        return os.path.join(ws_root, path)
+    return os.path.join(resolve_ws_base(ws_id), path)
 
 
 def get_edge_targets(transitions, key):

@@ -222,8 +222,10 @@ def main():
         inputs = []
         explicit_inputs = reg.get("inputs", [])
         for inp in explicit_inputs:
-            # v9.2: 删除 inp_type（resolve_workspace_output 不再需要 type）
-            resolved = resolve_workspace_output(args.workspace_id, inp["path"], app_path)
+            # 支持 abs_path（绝对路径）和 path（相对路径）
+            is_abs = bool(inp.get("abs_path"))
+            raw_path = inp.get("abs_path") or inp["path"]
+            resolved = resolve_workspace_output(args.workspace_id, raw_path, app_path, is_absolute=is_abs)
             if resolved not in inputs:
                 inputs.append(resolved)
 
@@ -240,11 +242,13 @@ def main():
                         if resolved not in inputs:
                             inputs.append(resolved)
 
-        # output_targets（v9.2: 删除 type 路径分流，统一解析）
+        # output_targets（支持 abs_path 绝对路径）
         output_targets = []
         for o in reg.get("outputs", []):
             o_copy = dict(o)
-            o_copy["path"] = resolve_workspace_output(args.workspace_id, o["path"], app_path)
+            is_abs = bool(o.get("abs_path"))
+            raw_path = o.get("abs_path") or o["path"]
+            o_copy["path"] = resolve_workspace_output(args.workspace_id, raw_path, app_path, is_absolute=is_abs)
             output_targets.append(o_copy)
         expected_outputs = []
         checkpoint_id = f"ckpt_{uuid.uuid4().hex[:12]}"
