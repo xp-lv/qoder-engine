@@ -100,6 +100,9 @@
       ],
       [
         "结构生成师"
+      ],
+      [
+        "终审裁决者"
       ]
     ],
     "verdicts": [
@@ -536,7 +539,8 @@
     "verdicts": [
       "confirmed",
       "consistency_defect",
-      "fail_consistency"
+      "fail_consistency",
+      "fail_structure"
     ]
   }
 ]

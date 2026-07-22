@@ -35,7 +35,7 @@
 **终审裁决书**（`outputs/终审裁决书.json`），JSON 结构：
 ```json
 {
-  "final_verdict": "confirmed | consistency_defect | fail_consistency",
+  "final_verdict": "confirmed | consistency_defect | fail_consistency | fail_structure",
   "redteam_summary": { "忠实度": {"total": 0, "high": 0}, "完整性": {"total": 0, "high": 0}, "一致性": {"total": 0, "high": 0} },
   "global_consistency": "通过/不通过 + 说明",
   "traceability": "蓝图-APP 追溯完整性结论",
@@ -50,12 +50,14 @@
 |---------|----------|----------|
 | `confirmed` | 三红队问题清单 high problem 数 = 0 且全局一致性通过且蓝图-APP 追溯完整 | → 完成（APP 包合格交付） |
 | `consistency_defect` | 不可恢复缺陷（rollback_counter > 3 兜底，或累计 ≥ 2 次一致性回退强制终止） | → 完成（终态退出，标注不可恢复） |
-| `fail_consistency` | 三红队问题清单存在 high problem 或全局一致性不通过，需回退 L3 填充层修复 | → 回退 Skill填充师 + Knowledge填充师（max_executions: 3） |
+| `fail_consistency` | 三红队问题清单存在 high problem 或全局一致性不通过，需回退 L3 填充层修复 | → 回退 Skill填充师 + Knowledge填充师（max_executions: 10） |
+| `fail_structure` | 发现 L2 结构层缺陷（app.yaml 拓扑错误 / ROUTER.json 路由缺失 / registry.json 登记不全 / manifest.json 路径遗漏），回退 L3 无法修复 | → 回退 结构生成师（max_executions: 10），L2 confirmed 后级联 L3 |
 
 ### verdict 决策优先级
 1. 先检查兜底条件（rollback_counter > 3 或累计回退 ≥ 2）→ `consistency_defect`
-2. 再检查红队 findings（high problem = 0 + 全局一致 + 追溯完整）→ `confirmed`
-3. 否则 → `fail_consistency`（回退修复）
+2. 检查是否存在 L2 结构层缺陷（app.yaml/ROUTER.json/manifest.json/registry.json）→ `fail_structure`
+3. 再检查红队 findings（high problem = 0 + 全局一致 + 追溯完整）→ `confirmed`
+4. 否则 → `fail_consistency`（回退修复）
 
 ## 自检项
 
@@ -64,4 +66,4 @@
 - [ ] 终审裁决书是否含 final_verdict + redteam_summary + global_consistency + traceability？
 - [ ] 是否检查了死循环兜底条件（rollback_counter / 累计回退次数）？
 - [ ] verdict 决策是否符合优先级（兜底 → confirmed → fail_consistency）？
-- [ ] result.verdict（confirmed/consistency_defect/fail_consistency）和 result.summary 是否填写？
+- [ ] result.verdict（confirmed/consistency_defect/fail_consistency/fail_structure）和 result.summary 是否填写？

@@ -22,10 +22,12 @@ app_name: app-builder-v2
 #     M1 → M2 → FORK[M3, M4] → JOIN → M5 → FORK[M6, M7, M8] → JOIN → M9 → 完成
 #
 # §3  控制流回退（蓝图 §2.2，引擎 verdict 路由）
-#     a) M5 编译预检 fail_compile → 回退 L3（M3/M4 重跑），max_executions: 3
+#     a) M5 编译预检 fail_compile → 回退 L3（M3/M4 重跑），max_executions: 10
 #        回退不收敛兜底：rollback_counter > 3 → 引擎转发 M9 标注 consistency_defect
-#     b) M9 终审 fail_consistency → 回退 L3（M3/M4 重跑），max_executions: 3
+#     b) M9 终审 fail_consistency → 回退 L3（M3/M4 重跑），max_executions: 10
 #     c) M9 终审 consistency_defect → 完成（不可恢复缺陷终态退出）
+#     d) M9 终审 fail_structure → 回退 L2（结构生成师重跑），max_executions: 10
+#        L2 重跑后自动级联 L3（利用现有正向边 FORK[M3, M4]）
 #
 # §4  并行兼容性（蓝图 §4.2）
 #     填充阶段: M3 ∥ M4 = 并行度 2（写目录隔离: M3 写 roles/，M4 写 knowledge/）
@@ -46,6 +48,7 @@ app_name: app-builder-v2
 #     · fail_compile — 编译预检发现结构缺陷（backward，M5 专属）
 #     · fail_consistency — 终审发现一致性问题（backward，M9 专属）
 #     · consistency_defect — 不可恢复缺陷（normal→完成，M9 兜底）
+#     · fail_structure — 终审发现 L2 结构层缺陷（backward→L2，M9 专属）
 #     注：fail_ 前缀由编译器识别为 backward 回退边
 # ═══════════════════════════════════════════════════════════════
 
@@ -179,9 +182,9 @@ edges:
   # ═══ M5 编译预检师 ═══
   # confirmed → FORK 三红队（并行度 3，蓝图 §4.1）
   - 编译预检师 → [忠实度红队, 完整性红队, 一致性红队] when: result.verdict == "confirmed"
-  # fail_compile → 回退 L3 填充层重跑（max_executions: 3，蓝图 §2.2 循环终止条件）
-  - 编译预检师 → Skill填充师 when: result.verdict == "fail_compile" max_executions: 3
-  - 编译预检师 → Knowledge填充师 when: result.verdict == "fail_compile" max_executions: 3
+  # fail_compile → 回退 L3 填充层重跑（max_executions: 10，蓝图 §2.2 循环终止条件）
+  - 编译预检师 → Skill填充师 when: result.verdict == "fail_compile" max_executions: 10
+  - 编译预检师 → Knowledge填充师 when: result.verdict == "fail_compile" max_executions: 10
 
   # ═══ L4 三红队 → M9 (JOIN 汇入)：三红队完成后汇入终审 ═══
   - [忠实度红队, 完整性红队, 一致性红队] → 终审裁决者
@@ -191,6 +194,8 @@ edges:
   - 终审裁决者 → 完成 when: result.verdict == "confirmed"
   # consistency_defect → 完成（不可恢复缺陷/回退不收敛兜底，终态退出）
   - 终审裁决者 → 完成 when: result.verdict == "consistency_defect"
-  # fail_consistency → 回退 L3 填充层修复（max_executions: 3）
-  - 终审裁决者 → Skill填充师 when: result.verdict == "fail_consistency" max_executions: 3
-  - 终审裁决者 → Knowledge填充师 when: result.verdict == "fail_consistency" max_executions: 3
+  # fail_consistency → 回退 L3 填充层修复（max_executions: 10）
+  - 终审裁决者 → Skill填充师 when: result.verdict == "fail_consistency" max_executions: 10
+  - 终审裁决者 → Knowledge填充师 when: result.verdict == "fail_consistency" max_executions: 10
+  # fail_structure → 回退 L2 结构层重跑（max_executions: 10，L2 confirmed 后级联 L3）
+  - 终审裁决者 → 结构生成师 when: result.verdict == "fail_structure" max_executions: 10

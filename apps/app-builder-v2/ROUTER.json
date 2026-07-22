@@ -147,7 +147,7 @@
             "Knowledge填充师"
           ],
           "type": "backward",
-          "max_executions": 3
+          "max_executions": 10
         },
         "fail": {
           "targets": [
@@ -265,7 +265,22 @@
             "Knowledge填充师"
           ],
           "type": "backward",
-          "max_executions": 3
+          "max_executions": 10
+        },
+        "fail_structure": {
+          "targets": [
+            "结构生成师"
+          ],
+          "type": "backward",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "outputs/终审裁决书.json"
+            },
+            {
+              "path": "outputs/终审裁决者-gate-result.json"
+            }
+          ]
         },
         "fail": {
           "targets": [

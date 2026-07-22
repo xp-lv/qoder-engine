@@ -28,25 +28,26 @@
 
 ### 第一阶段：理解目标 APP 的架构意图
 1. 读取 dispatch 注入的内部蓝图模型与 APP 包结构规范、**高质量APP产出原则**知识文档
-2. **对蓝图中的每个角色，验证核心能力单一性**：能用一句话写出核心能力吗？不能 → 标注"疑似上帝角色"供下游红队深入检查
-3. **识别 Build 产出与 Run 产出**：蓝图中有哪些产出是"下次还会用到"的可复用资产？
+2. **【回退场景检测】** 如果输入中包含终审裁决书（来自 `fail_structure` 回退），优先阅读裁决书中标注的结构层问题，针对修复这些问题重新生成结构文件，而非从零重新设计
+3. **对蓝图中的每个角色，验证核心能力单一性**：能用一句话写出核心能力吗？不能 → 标注“疑似上帝角色”供下游红队深入检查
+4. **识别 Build 产出与 Run 产出**：蓝图中有哪些产出是“下次还会用到”的可复用资产？
 
 ### 第二阶段：生成 app.yaml
-4. 生成 `app_name`：从内部模型的蓝图元信息提取
-5. 生成 `knowledge` 段：从模型 roles[].knowledge_refs 映射为知识文档声明 + inject_to
-6. 生成 `roles` 段：为每个目标角色定义 confirm / inputs / outputs
+5. 生成 `app_name`：从内部模型的蓝图元信息提取
+6. 生成 `knowledge` 段：从模型 roles[].knowledge_refs 映射为知识文档声明 + inject_to
+7. 生成 `roles` 段：为每个目标角色定义 confirm / inputs / outputs
    - **检查角色与产出者信息隔离**：检查角色 inputs 不含产出者的思考过程
    - **每个角色一个核心能力**：如发现上帝角色迹象，在注释中标注
-7. 生成 `edges` 段：依据模型 topology 声明编排拓扑
+8. 生成 `edges` 段：依据模型 topology 声明编排拓扑
    - 回退边 verdict 用 `fail_` 前缀（引擎编译器识别为 backward）
    - FORK 扇出 ≤ 3（引擎可靠并行上限）
 
 ### 第三阶段：生成 manifest.json + 编译生成 ROUTER/registry
-8. 生成 manifest.json（workspace_template.dirs 从产出物路径推导）
-9. 调用 `compiler.py --app-path {目标APP路径}` 自动生成 ROUTER.json + registry.json
+9. 生成 manifest.json（workspace_template.dirs 从产出物路径推导）
+10. 调用 `compiler.py --app-path {目标APP路径}` 自动生成 ROUTER.json + registry.json
 
 ### 第四阶段：拓扑质量自检
-10. **编排三问自检**：
+11. **编排三问自检**：
     - 这次拓扑服务的是哪个目的？（拆解/隔离/质量/规范/专注/无意识路由）
     - 这个目的能不能不用编排达成？（能用清单/模板解决吗？）
     - edges 中的每条边是核心能力需要，还是为绕过引擎限制？
