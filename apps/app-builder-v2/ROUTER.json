@@ -272,15 +272,7 @@
             "结构生成师"
           ],
           "type": "backward",
-          "max_executions": 3,
-          "carries": [
-            {
-              "path": "outputs/终审裁决书.json"
-            },
-            {
-              "path": "outputs/终审裁决者-gate-result.json"
-            }
-          ]
+          "max_executions": 10
         },
         "fail": {
           "targets": [
