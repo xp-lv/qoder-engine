@@ -1,0 +1,384 @@
+[
+  {
+    "role_name": "需求接收者",
+    "skill_path": "roles/需求接收者/skill.md",
+    "blocking_mode": "manual",
+    "outputs": [
+      {
+        "name": "需求文档",
+        "path": "00-需求描述.md"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "input_groups": [
+      [
+        "需求接收者"
+      ]
+    ],
+    "verdicts": [
+      "confirmed",
+      "loop"
+    ]
+  },
+  {
+    "role_name": "漏洞发现者",
+    "skill_path": "roles/漏洞发现者/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "漏洞清单",
+        "path": "outputs/漏洞清单.json"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "需求文档",
+        "path": "00-需求描述.md"
+      },
+      {
+        "name": "引擎代码架构地图",
+        "path": "knowledge/引擎代码架构地图.md",
+        "type": "knowledge"
+      },
+      {
+        "name": "代码异味识别指南",
+        "path": "knowledge/代码异味识别指南.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "需求接收者"
+      ],
+      [
+        "漏洞证伪红队"
+      ],
+      [
+        "漏洞发现者"
+      ]
+    ],
+    "verdicts": [
+      "has_issues"
+    ]
+  },
+  {
+    "role_name": "漏洞证伪红队",
+    "skill_path": "roles/漏洞证伪红队/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "证伪报告",
+        "path": "outputs/漏洞证伪报告.json"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "漏洞清单",
+        "path": "outputs/漏洞清单.json"
+      },
+      {
+        "name": "证伪方法论",
+        "path": "knowledge/证伪方法论.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "漏洞发现者"
+      ],
+      [
+        "漏洞证伪红队"
+      ]
+    ],
+    "verdicts": [
+      "confirmed",
+      "disproved"
+    ]
+  },
+  {
+    "role_name": "修复方案设计师",
+    "skill_path": "roles/修复方案设计师/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "修复方案",
+        "path": "outputs/修复方案.json"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "漏洞清单",
+        "path": "outputs/漏洞清单.json"
+      },
+      {
+        "name": "证伪报告",
+        "path": "outputs/漏洞证伪报告.json"
+      },
+      {
+        "name": "方案审查报告",
+        "path": "outputs/方案审查报告.json"
+      },
+      {
+        "name": "安全重构原则",
+        "path": "knowledge/安全重构原则.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "漏洞证伪红队"
+      ],
+      [
+        "方案审查红队"
+      ],
+      [
+        "修复方案设计师"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "方案审查红队",
+    "skill_path": "roles/方案审查红队/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "方案审查报告",
+        "path": "outputs/方案审查报告.json"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "修复方案",
+        "path": "outputs/修复方案.json"
+      },
+      {
+        "name": "证伪方法论",
+        "path": "knowledge/证伪方法论.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "修复方案设计师"
+      ],
+      [
+        "方案审查红队"
+      ]
+    ],
+    "verdicts": [
+      "approved",
+      "rejected"
+    ]
+  },
+  {
+    "role_name": "代码执行者",
+    "skill_path": "roles/代码执行者/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "执行报告",
+        "path": "outputs/执行报告.json"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "修复方案",
+        "path": "outputs/修复方案.json"
+      },
+      {
+        "name": "执行审查报告",
+        "path": "outputs/执行审查报告.json"
+      }
+    ],
+    "input_groups": [
+      [
+        "方案审查红队"
+      ],
+      [
+        "执行审查红队"
+      ],
+      [
+        "代码执行者"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "执行审查红队",
+    "skill_path": "roles/执行审查红队/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "执行审查报告",
+        "path": "outputs/执行审查报告.json"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "修复方案",
+        "path": "outputs/修复方案.json"
+      },
+      {
+        "name": "执行报告",
+        "path": "outputs/执行报告.json"
+      },
+      {
+        "name": "证伪方法论",
+        "path": "knowledge/证伪方法论.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "代码执行者"
+      ],
+      [
+        "执行审查红队"
+      ]
+    ],
+    "verdicts": [
+      "clean",
+      "has_defects"
+    ]
+  },
+  {
+    "role_name": "改进报告生成者",
+    "skill_path": "roles/改进报告生成者/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "改进报告",
+        "path": "改进报告.md"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "漏洞清单",
+        "path": "outputs/漏洞清单.json"
+      },
+      {
+        "name": "证伪报告",
+        "path": "outputs/漏洞证伪报告.json"
+      },
+      {
+        "name": "修复方案",
+        "path": "outputs/修复方案.json"
+      },
+      {
+        "name": "方案审查报告",
+        "path": "outputs/方案审查报告.json"
+      },
+      {
+        "name": "执行报告",
+        "path": "outputs/执行报告.json"
+      },
+      {
+        "name": "执行审查报告",
+        "path": "outputs/执行审查报告.json"
+      }
+    ],
+    "input_groups": [
+      [
+        "执行审查红队"
+      ],
+      [
+        "改进报告生成者"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  }
+]

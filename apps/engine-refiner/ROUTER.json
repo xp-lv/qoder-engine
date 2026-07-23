@@ -1,0 +1,249 @@
+{
+  "schema_version": "2.0",
+  "entry": "需求接收者",
+  "steps": [
+    {
+      "step": "需求接收者",
+      "role": "需求接收者",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "漏洞发现者"
+          ],
+          "type": "normal"
+        },
+        "loop": {
+          "targets": [
+            "需求接收者"
+          ],
+          "type": "normal"
+        },
+        "fail": {
+          "targets": [
+            "需求接收者"
+          ],
+          "type": "backward",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "00-需求描述.md"
+            },
+            {
+              "path": "outputs/需求接收者-gate-result.json"
+            },
+            {
+              "path": "outputs/需求接收者-feedback.json"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "漏洞发现者",
+      "role": "漏洞发现者",
+      "transitions": {
+        "has_issues": {
+          "targets": [
+            "漏洞证伪红队"
+          ],
+          "type": "normal"
+        },
+        "fail": {
+          "targets": [
+            "漏洞发现者"
+          ],
+          "type": "backward",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "outputs/漏洞清单.json"
+            },
+            {
+              "path": "outputs/漏洞发现者-gate-result.json"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "漏洞证伪红队",
+      "role": "漏洞证伪红队",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "修复方案设计师"
+          ],
+          "type": "normal"
+        },
+        "disproved": {
+          "targets": [
+            "漏洞发现者"
+          ],
+          "type": "normal"
+        },
+        "fail": {
+          "targets": [
+            "漏洞证伪红队"
+          ],
+          "type": "backward",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "outputs/漏洞证伪报告.json"
+            },
+            {
+              "path": "outputs/漏洞证伪红队-gate-result.json"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "修复方案设计师",
+      "role": "修复方案设计师",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "方案审查红队"
+          ],
+          "type": "normal"
+        },
+        "fail": {
+          "targets": [
+            "修复方案设计师"
+          ],
+          "type": "backward",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "outputs/修复方案.json"
+            },
+            {
+              "path": "outputs/修复方案设计师-gate-result.json"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "方案审查红队",
+      "role": "方案审查红队",
+      "transitions": {
+        "approved": {
+          "targets": [
+            "代码执行者"
+          ],
+          "type": "normal"
+        },
+        "rejected": {
+          "targets": [
+            "修复方案设计师"
+          ],
+          "type": "normal",
+          "max_executions": 5
+        },
+        "fail": {
+          "targets": [
+            "方案审查红队"
+          ],
+          "type": "backward",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "outputs/方案审查报告.json"
+            },
+            {
+              "path": "outputs/方案审查红队-gate-result.json"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "代码执行者",
+      "role": "代码执行者",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "执行审查红队"
+          ],
+          "type": "normal"
+        },
+        "fail": {
+          "targets": [
+            "代码执行者"
+          ],
+          "type": "backward",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "outputs/执行报告.json"
+            },
+            {
+              "path": "outputs/代码执行者-gate-result.json"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "执行审查红队",
+      "role": "执行审查红队",
+      "transitions": {
+        "clean": {
+          "targets": [
+            "改进报告生成者"
+          ],
+          "type": "normal"
+        },
+        "has_defects": {
+          "targets": [
+            "代码执行者"
+          ],
+          "type": "normal",
+          "max_executions": 3
+        },
+        "fail": {
+          "targets": [
+            "执行审查红队"
+          ],
+          "type": "backward",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "outputs/执行审查报告.json"
+            },
+            {
+              "path": "outputs/执行审查红队-gate-result.json"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "改进报告生成者",
+      "role": "改进报告生成者",
+      "transitions": {
+        "confirmed": {
+          "targets": [],
+          "type": "normal"
+        },
+        "fail": {
+          "targets": [
+            "改进报告生成者"
+          ],
+          "type": "backward",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "改进报告.md"
+            },
+            {
+              "path": "outputs/改进报告生成者-gate-result.json"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -3,20 +3,15 @@
     "role_name": "需求接收者",
     "skill_path": "roles/需求接收者/skill.md",
     "blocking_mode": "manual",
-    "role_type": "producer",
     "outputs": [
       {
         "name": "探索任务书",
-        "path": "01-探索任务书.md",
-        "type": "deliverable"
+        "path": "01-探索任务书.md"
       }
     ],
     "gate_rules": {
       "phase1_cross_validation": {
-        "enabled": true,
-        "text_validation": {
-          "min_size": 50
-        }
+        "enabled": true
       },
       "phase2_schema_comparison": {
         "enabled": false
@@ -25,10 +20,9 @@
         "enabled": false
       }
     },
-    "principles": "roles/需求接收者/principles.md",
     "input_groups": [
       [
-        "需求接收者-validate"
+        "需求接收者_校验_"
       ],
       [
         "需求接收者"
@@ -42,32 +36,15 @@
     "role_name": "需求接收者（校验）",
     "skill_path": "roles/需求接收者_校验_/skill.md",
     "blocking_mode": "auto",
-    "role_type": "standard",
     "outputs": [
       {
-        "name": "需求接收者校验报告",
-        "path": "outputs/需求接收者-validation.json",
-        "type": "deliverable"
-      }
-    ],
-    "inputs": [
-      {
-        "name": "探索任务书",
-        "path": "01-探索任务书.md",
-        "type": "deliverable"
+        "name": "需求校验报告",
+        "path": "outputs/需求接收者-validation.json"
       }
     ],
     "gate_rules": {
       "phase1_cross_validation": {
-        "enabled": true,
-        "rules": [
-          {
-            "type": "field_exists",
-            "field": "result.verdict",
-            "must_be_non_empty": true,
-            "description": "校验角色必须输出 result.verdict"
-          }
-        ]
+        "enabled": true
       },
       "phase2_schema_comparison": {
         "enabled": false
@@ -76,16 +53,18 @@
         "enabled": false
       }
     },
-    "principles": "roles/需求接收者/principles.md",
+    "inputs": [
+      {
+        "name": "探索任务书",
+        "path": "01-探索任务书.md"
+      }
+    ],
     "input_groups": [
       [
         "需求接收者"
       ],
       [
-        "需求接收者"
-      ],
-      [
-        "需求接收者-validate"
+        "需求接收者_校验_"
       ]
     ],
     "verdicts": [
@@ -97,20 +76,15 @@
     "role_name": "市场情报搜集者",
     "skill_path": "roles/市场情报搜集者/skill.md",
     "blocking_mode": "auto",
-    "role_type": "standard",
     "outputs": [
       {
         "name": "市场情报报告",
-        "path": "02-市场情报报告.md",
-        "type": "deliverable"
+        "path": "02-市场情报报告.md"
       }
     ],
     "gate_rules": {
       "phase1_cross_validation": {
-        "enabled": true,
-        "text_validation": {
-          "min_size": 50
-        }
+        "enabled": true
       },
       "phase2_schema_comparison": {
         "enabled": false
@@ -122,8 +96,7 @@
     "inputs": [
       {
         "name": "探索任务书",
-        "path": "01-探索任务书.md",
-        "type": "deliverable"
+        "path": "01-探索任务书.md"
       },
       {
         "name": "市场情报方法论",
@@ -133,7 +106,7 @@
     ],
     "input_groups": [
       [
-        "需求接收者-validate"
+        "需求接收者_校验_"
       ],
       [
         "市场情报搜集者"
@@ -147,20 +120,15 @@
     "role_name": "机会分析师",
     "skill_path": "roles/机会分析师/skill.md",
     "blocking_mode": "auto",
-    "role_type": "standard",
     "outputs": [
       {
         "name": "机会清单",
-        "path": "03-机会清单.md",
-        "type": "deliverable"
+        "path": "03-机会清单.md"
       }
     ],
     "gate_rules": {
       "phase1_cross_validation": {
-        "enabled": true,
-        "text_validation": {
-          "min_size": 50
-        }
+        "enabled": true
       },
       "phase2_schema_comparison": {
         "enabled": false
@@ -172,18 +140,15 @@
     "inputs": [
       {
         "name": "探索任务书",
-        "path": "01-探索任务书.md",
-        "type": "deliverable"
+        "path": "01-探索任务书.md"
       },
       {
         "name": "市场情报报告",
-        "path": "02-市场情报报告.md",
-        "type": "deliverable"
+        "path": "02-市场情报报告.md"
       },
       {
         "name": "对抗报告",
-        "path": "outputs/机会红队-对抗报告.json",
-        "type": "process"
+        "path": "outputs/机会红队-对抗报告.json"
       },
       {
         "name": "机会评估方法论",
@@ -210,20 +175,15 @@
     "role_name": "机会红队",
     "skill_path": "roles/机会红队/skill.md",
     "blocking_mode": "auto",
-    "role_type": "standard",
     "outputs": [
       {
         "name": "对抗报告",
-        "path": "outputs/机会红队-对抗报告.json",
-        "type": "process"
+        "path": "outputs/机会红队-对抗报告.json"
       }
     ],
     "gate_rules": {
       "phase1_cross_validation": {
-        "enabled": true,
-        "text_validation": {
-          "min_size": 50
-        }
+        "enabled": true
       },
       "phase2_schema_comparison": {
         "enabled": false
@@ -235,13 +195,11 @@
     "inputs": [
       {
         "name": "机会清单",
-        "path": "03-机会清单.md",
-        "type": "deliverable"
+        "path": "03-机会清单.md"
       },
       {
         "name": "探索任务书",
-        "path": "01-探索任务书.md",
-        "type": "deliverable"
+        "path": "01-探索任务书.md"
       },
       {
         "name": "红队测试方法论",
@@ -266,20 +224,15 @@
     "role_name": "策略建议者",
     "skill_path": "roles/策略建议者/skill.md",
     "blocking_mode": "auto",
-    "role_type": "standard",
     "outputs": [
       {
         "name": "策略建议",
-        "path": "04-策略建议.md",
-        "type": "deliverable"
+        "path": "04-策略建议.md"
       }
     ],
     "gate_rules": {
       "phase1_cross_validation": {
-        "enabled": true,
-        "text_validation": {
-          "min_size": 50
-        }
+        "enabled": true
       },
       "phase2_schema_comparison": {
         "enabled": false
@@ -291,18 +244,15 @@
     "inputs": [
       {
         "name": "机会清单",
-        "path": "03-机会清单.md",
-        "type": "deliverable"
+        "path": "03-机会清单.md"
       },
       {
         "name": "对抗报告",
-        "path": "outputs/机会红队-对抗报告.json",
-        "type": "process"
+        "path": "outputs/机会红队-对抗报告.json"
       },
       {
         "name": "探索任务书",
-        "path": "01-探索任务书.md",
-        "type": "deliverable"
+        "path": "01-探索任务书.md"
       },
       {
         "name": "策略制定指南",
@@ -326,20 +276,15 @@
     "role_name": "综合报告者",
     "skill_path": "roles/综合报告者/skill.md",
     "blocking_mode": "auto",
-    "role_type": "standard",
     "outputs": [
       {
         "name": "综合报告",
-        "path": "AI副业探索报告.md",
-        "type": "deliverable"
+        "path": "AI副业探索报告.md"
       }
     ],
     "gate_rules": {
       "phase1_cross_validation": {
-        "enabled": true,
-        "text_validation": {
-          "min_size": 50
-        }
+        "enabled": true
       },
       "phase2_schema_comparison": {
         "enabled": false
@@ -351,28 +296,23 @@
     "inputs": [
       {
         "name": "探索任务书",
-        "path": "01-探索任务书.md",
-        "type": "deliverable"
+        "path": "01-探索任务书.md"
       },
       {
         "name": "市场情报报告",
-        "path": "02-市场情报报告.md",
-        "type": "deliverable"
+        "path": "02-市场情报报告.md"
       },
       {
         "name": "机会清单",
-        "path": "03-机会清单.md",
-        "type": "deliverable"
+        "path": "03-机会清单.md"
       },
       {
         "name": "对抗报告",
-        "path": "outputs/机会红队-对抗报告.json",
-        "type": "process"
+        "path": "outputs/机会红队-对抗报告.json"
       },
       {
         "name": "策略建议",
-        "path": "04-策略建议.md",
-        "type": "deliverable"
+        "path": "04-策略建议.md"
       },
       {
         "name": "报告格式规范",

@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>pure-arch-design</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:-apple-system,'PingFang SC',sans-serif;background:#0f172a;color:#e2e8f0;overflow:hidden;}
+
+#topbar{position:fixed;top:0;left:0;right:0;z-index:50;height:42px;background:#1e293b;border-bottom:1px solid #334155;display:flex;align-items:center;gap:12px;padding:0 20px;}
+#topbar h1{font-size:15px;color:#38bdf8;white-space:nowrap;}
+#topbar .legend{display:flex;gap:10px;font-size:11px;color:#64748b;}
+#topbar .legend span{display:flex;align-items:center;gap:3px;}
+#topbar .ctrls{margin-left:auto;display:flex;gap:6px;align-items:center;}
+#topbar button{background:#334155;border:1px solid #475569;color:#e2e8f0;border-radius:5px;padding:3px 10px;font-size:12px;cursor:pointer;}
+#topbar button:hover{background:#475569;}
+#topbar .zv{color:#64748b;font-size:11px;min-width:36px;text-align:center;}
+
+#cwrap{position:fixed;top:42px;left:0;right:0;bottom:0;overflow:hidden;}
+#svgc{transform-origin:0 0;}
+
+.node-role{cursor:pointer;transition:opacity 0.2s;}
+.node-role:hover rect{stroke-width:3;filter:brightness(1.4);}
+.node-file{cursor:pointer;transition:opacity 0.2s;}
+.node-file:hover rect{stroke-width:2;filter:brightness(1.4);}
+
+/* 悬停高亮动画 */
+.link{transition:stroke-opacity 0.3s,stroke-width 0.3s;}
+@keyframes pulse-green{0%,100%{stroke-opacity:0.7;stroke-width:2;}50%{stroke-opacity:1;stroke-width:3.5;}}
+@keyframes pulse-red{0%,100%{stroke-opacity:0.7;stroke-width:2;}50%{stroke-opacity:1;stroke-width:3.5;}}
+@keyframes flow-dash{to{stroke-dashoffset:-20;}}
+
+.link-active-green{animation:pulse-green 1s ease-in-out infinite;stroke-dasharray:6,4 !important;stroke:#4ade80 !important;}
+.link-active-kn{animation:pulse-green 1s ease-in-out infinite;stroke-dasharray:6,4 !important;stroke:#818cf8 !important;}
+.link-active-red{animation:pulse-red 1s ease-in-out infinite;stroke-dasharray:6,4 !important;stroke:#f87171 !important;}
+.link-dim{stroke-opacity:0.03 !important;}
+.node-dim{opacity:0.15 !important;}
+.node-highlight rect{filter:brightness(1.5) drop-shadow(0 0 6px currentColor);}
+
+/* tooltip */
+#tt{display:none;position:fixed;z-index:100;background:#1e293b;border:1px solid #475569;border-radius:8px;max-width:380px;max-height:75vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.7);font-size:11px;}
+#tt .th{background:#334155;padding:7px 11px;border-radius:8px 8px 0 0;font-size:14px;font-weight:bold;color:#f1f5f9;}
+#tt .tb{padding:8px 11px;}
+#tt .ts{margin-bottom:8px;}
+#tt .ts h4{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:#818cf8;margin-bottom:3px;}
+#tt .tr{display:flex;align-items:baseline;gap:4px;padding:1px 0;line-height:1.3;}
+#tt .tr .fn{color:#cbd5e1;min-width:60px;font-size:10px;}
+#tt .tr .fp{color:#64748b;font-family:monospace;font-size:9px;word-break:break-all;}
+#tt .vt{display:inline-block;background:#312e81;color:#a5b4fc;padding:1px 5px;border-radius:4px;font-family:monospace;font-size:9px;margin:1px;}
+#tt .er{padding:1px 0;color:#94a3b8;font-size:10px;}
+#tt .ev{color:#a5b4fc;font-family:monospace;}
+#tt .et{color:#4ade80;}
+#tt .cat-kn{color:#a5b4fc;}#tt .cat-ws{color:#4ade80;}#tt .cat-ext{color:#fbbf24;}
+</style>
+</head>
+<body>
+<div id="topbar">
+  <h1>&#128203; pure-arch-design</h1>
+  <div class="legend">
+    <span><span style="color:#38bdf8">&#9881;</span> Role</span>
+    <span><span style="color:#a5b4fc">&#128218;</span> Knowledge</span>
+    <span><span style="color:#4ade80">&#128230;</span> Workspace</span>
+    <span><span style="color:#fbbf24">&#128196;</span> External</span>
+    <span style="color:#64748b;">| &#128161; &#25335;&#20197;&#36873;&#20013; Role &#30475;&#27880;&#20837;/&#36755;&#20986;&#21160;&#30011;</span>
+  </div>
+  <div class="ctrls">
+    <button onclick="zb(-0.1)">&#128196;</button>
+    <span class="zv" id="zv">100%</span>
+    <button onclick="zb(0.1)">&#128197;</button>
+    <button onclick="rv()">Reset</button>
+  </div>
+</div>
+<div id="cwrap"><div id="svgc">
+<svg width="2550" height="480" xmlns="http://www.w3.org/2000/svg" style="background:#0f172a">
+<rect x="5" y="55" width="230" height="365" rx="8" fill="rgba(99,102,241,0.05)" stroke="rgba(99,102,241,0.15)" stroke-width="1"/>
+<text x="15" y="50" fill="#818cf8" font-size="13" font-weight="600">📚 Knowledge</text>
+<rect x="2276" y="55" width="240" height="365" rx="8" fill="rgba(74,222,128,0.05)" stroke="rgba(74,222,128,0.15)" stroke-width="1"/>
+<text x="2286" y="50" fill="#4ade80" font-size="13" font-weight="600">📦 Workspace 产物</text>
+<text x="300" y="32" fill="#fbbf24" font-size="13" font-weight="600">📄 External</text>
+<g id="links">
+<path d="M365,130 C365,105 655,105 655,80" stroke="#38bdf8" stroke-width="1.5" stroke-opacity="0.4" fill="none" class="link link-verdict" style="normal" data-from="r0_0" data-to="r1_0" id="r0_0__r1_0"/>
+<text x="510" y="105" fill="#38bdf8" font-size="9" text-anchor="middle" opacity="0.6" class="edge-label">confirmed</text>
+<path d="M655,130 C655,105 945,105 945,80" stroke="#38bdf8" stroke-width="1.5" stroke-opacity="0.4" fill="none" class="link link-verdict" style="normal" data-from="r1_0" data-to="r2_0" id="r1_0__r2_0"/>
+<text x="800" y="105" fill="#38bdf8" font-size="9" text-anchor="middle" opacity="0.6" class="edge-label">confirmed</text>
+<path d="M655,130 C655,105 365,105 365,80" stroke="#fbbf24" stroke-width="1.5" stroke-opacity="0.4" fill="none" class="link link-verdict" style="loop" data-from="r1_0" data-to="r0_0" id="r1_0__r0_0"/>
+<text x="510" y="105" fill="#fbbf24" font-size="9" text-anchor="middle" opacity="0.6" class="edge-label">loop</text>
+<path d="M945,130 C945,105 1235,105 1235,80" stroke="#38bdf8" stroke-width="1.5" stroke-opacity="0.4" fill="none" class="link link-verdict" style="normal" data-from="r2_0" data-to="r3_0" id="r2_0__r3_0"/>
+<text x="1090" y="105" fill="#38bdf8" font-size="9" text-anchor="middle" opacity="0.6" class="edge-label">blueprint_v1_ready</text>
+<path d="M1235,130 C1235,105 945,105 945,80" stroke="#fbbf24" stroke-width="1.5" stroke-opacity="0.4" fill="none" class="link link-verdict" style="loop" data-from="r3_0" data-to="r2_0" id="r3_0__r2_0"/>
+<text x="1090" y="105" fill="#fbbf24" font-size="9" text-anchor="middle" opacity="0.6" class="edge-label">loop</text>
+<path d="M1235,130 C1235,105 1525,105 1525,80" stroke="#38bdf8" stroke-width="1.5" stroke-opacity="0.4" fill="none" class="link link-verdict" style="normal" data-from="r3_0" data-to="r4_0" id="r3_0__r4_0"/>
+<text x="1380" y="105" fill="#38bdf8" font-size="9" text-anchor="middle" opacity="0.6" class="edge-label">blueprint_v1_ready</text>
+<path d="M1235,130 C1235,142 1525,142 1525,155" stroke="#38bdf8" stroke-width="1.5" stroke-opacity="0.4" fill="none" class="link link-verdict" style="normal" data-from="r3_0" data-to="r4_1" id="r3_0__r4_1"/>
+<text x="1380" y="142" fill="#38bdf8" font-size="9" text-anchor="middle" opacity="0.6" class="edge-label">blueprint_v1_ready</text>
+<path d="M1235,130 C1235,180 1525,180 1525,230" stroke="#38bdf8" stroke-width="1.5" stroke-opacity="0.4" fill="none" class="link link-verdict" style="normal" data-from="r3_0" data-to="r4_2" id="r3_0__r4_2"/>
+<text x="1380" y="180" fill="#38bdf8" font-size="9" text-anchor="middle" opacity="0.6" class="edge-label">blueprint_v1_ready</text>
+<path d="M1235,130 C1235,218 1525,218 1525,305" stroke="#38bdf8" stroke-width="1.5" stroke-opacity="0.4" fill="none" class="link link-verdict" style="normal" data-from="r3_0" data-to="r4_3" id="r3_0__r4_3"/>
+<text x="1380" y="218" fill="#38bdf8" font-size="9" text-anchor="middle" opacity="0.6" class="edge-label">blueprint_v1_ready</text>
+<path d="M1235,130 C1235,105 2105,105 2105,80" stroke="#38bdf8" stroke-width="1.5" stroke-opacity="0.4" fill="none" class="link link-verdict" style="normal" data-from="r3_0" data-to="r6_0" id="r3_0__r6_0"/>
+<text x="1670" y="105" fill="#38bdf8" font-size="9" text-anchor="middle" opacity="0.6" class="edge-label">unregistered_requirement</text>
+<path d="M1525,130 C1525,105 1815,105 1815,80" stroke="#38bdf8" stroke-width="1.5" stroke-opacity="0.4" fill="none" class="link link-verdict" style="normal" data-from="r4_0" data-to="r5_0" id="r4_0__r5_0"/>
+<path d="M1525,205 C1525,142 1815,142 1815,80" stroke="#38bdf8" stroke-width="1.5" stroke-opacity="0.4" fill="none" class="link link-verdict" style="normal" data-from="r4_1" data-to="r5_0" id="r4_1__r5_0"/>
+<path d="M1525,280 C1525,180 1815,180 1815,80" stroke="#38bdf8" stroke-width="1.5" stroke-opacity="0.4" fill="none" class="link link-verdict" style="normal" data-from="r4_2" data-to="r5_0" id="r4_2__r5_0"/>
+<path d="M1525,355 C1525,218 1815,218 1815,80" stroke="#38bdf8" stroke-width="1.5" stroke-opacity="0.4" fill="none" class="link link-verdict" style="normal" data-from="r4_3" data-to="r5_0" id="r4_3__r5_0"/>
+<path d="M1815,130 C1815,105 2105,105 2105,80" stroke="#38bdf8" stroke-width="1.5" stroke-opacity="0.4" fill="none" class="link link-verdict" style="normal" data-from="r5_0" data-to="r6_0" id="r5_0__r6_0"/>
+<text x="1960" y="105" fill="#38bdf8" font-size="9" text-anchor="middle" opacity="0.6" class="edge-label">all_passed</text>
+<path d="M1815,130 C1815,105 945,105 945,80" stroke="#f87171" stroke-width="2" stroke-opacity="0.4" fill="none" class="link link-verdict" style="back" data-from="r5_0" data-to="r2_0" id="r5_0__r2_0"/>
+<text x="1380" y="105" fill="#f87171" font-size="9" text-anchor="middle" opacity="0.6" class="edge-label">issues_found</text>
+<text x="2105" y="148" fill="#fbbf24" font-size="12" text-anchor="middle" class="end-mark">🏁 passed</text>
+<path d="M2105,130 C2105,105 945,105 945,80" stroke="#f87171" stroke-width="2" stroke-opacity="0.4" fill="none" class="link link-verdict" style="back" data-from="r6_0" data-to="r2_0" id="r6_0__r2_0"/>
+<text x="1525" y="105" fill="#f87171" font-size="9" text-anchor="middle" opacity="0.6" class="edge-label">consistency_defect x2</text>
+<text x="2105" y="148" fill="#fbbf24" font-size="12" text-anchor="middle" class="end-mark">🏁 terminated</text>
+<path d="M2105,130 C2105,105 365,105 365,80" stroke="#38bdf8" stroke-width="1.5" stroke-opacity="0.4" fill="none" class="link link-verdict" style="normal" data-from="r6_0" data-to="r0_0" id="r6_0__r0_0"/>
+<text x="1235" y="105" fill="#38bdf8" font-size="9" text-anchor="middle" opacity="0.6" class="edge-label">reqid_approved x2</text>
+<path d="M2105,130 C2105,105 945,105 945,80" stroke="#f87171" stroke-width="2" stroke-opacity="0.4" fill="none" class="link link-verdict" style="back" data-from="r6_0" data-to="r2_0" id="r6_0__r2_0"/>
+<text x="1525" y="105" fill="#f87171" font-size="9" text-anchor="middle" opacity="0.6" class="edge-label">reqid_rejected</text>
+<path d="M2490,103 C1530,103 1530,105 570,105" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-input" data-cat="workspace" data-file="ws_outputs/需求规格文档.md_1" data-role="r1_0" id="ws_outputs/需求规格文档.md_1__r1_0"/>
+<path d="M2490,103 C1675,103 1675,105 860,105" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-input" data-cat="workspace" data-file="ws_outputs/需求规格文档.md_1" data-role="r2_0" id="ws_outputs/需求规格文档.md_1__r2_0"/>
+<path d="M2490,103 C1820,103 1820,105 1150,105" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-input" data-cat="workspace" data-file="ws_outputs/需求规格文档.md_1" data-role="r3_0" id="ws_outputs/需求规格文档.md_1__r3_0"/>
+<path d="M2490,103 C1965,103 1965,105 1440,105" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-input" data-cat="workspace" data-file="ws_outputs/需求规格文档.md_1" data-role="r4_0" id="ws_outputs/需求规格文档.md_1__r4_0"/>
+<path d="M2490,103 C1965,103 1965,180 1440,180" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-input" data-cat="workspace" data-file="ws_outputs/需求规格文档.md_1" data-role="r4_1" id="ws_outputs/需求规格文档.md_1__r4_1"/>
+<path d="M2490,103 C1965,103 1965,255 1440,255" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-input" data-cat="workspace" data-file="ws_outputs/需求规格文档.md_1" data-role="r4_2" id="ws_outputs/需求规格文档.md_1__r4_2"/>
+<path d="M2490,103 C1965,103 1965,330 1440,330" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-input" data-cat="workspace" data-file="ws_outputs/需求规格文档.md_1" data-role="r4_3" id="ws_outputs/需求规格文档.md_1__r4_3"/>
+<path d="M2490,103 C2255,103 2255,105 2020,105" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-input" data-cat="workspace" data-file="ws_outputs/需求规格文档.md_1" data-role="r6_0" id="ws_outputs/需求规格文档.md_1__r6_0"/>
+<path d="M450,105 C1368,105 1368,103 2286,103" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-output" data-file="ws_outputs/需求规格文档.md_1" data-role="r0_0" id="r0_0__ws_outputs/需求规格文档.md_1"/>
+<path d="M2490,125 C1820,125 1820,105 1150,105" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-input" data-cat="workspace" data-file="ws_outputs/架构蓝图.md_1" data-role="r3_0" id="ws_outputs/架构蓝图.md_1__r3_0"/>
+<path d="M2490,125 C1965,125 1965,105 1440,105" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-input" data-cat="workspace" data-file="ws_outputs/架构蓝图.md_1" data-role="r4_0" id="ws_outputs/架构蓝图.md_1__r4_0"/>
+<path d="M2490,125 C1965,125 1965,180 1440,180" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-input" data-cat="workspace" data-file="ws_outputs/架构蓝图.md_1" data-role="r4_1" id="ws_outputs/架构蓝图.md_1__r4_1"/>
+<path d="M2490,125 C1965,125 1965,255 1440,255" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-input" data-cat="workspace" data-file="ws_outputs/架构蓝图.md_1" data-role="r4_2" id="ws_outputs/架构蓝图.md_1__r4_2"/>
+<path d="M2490,125 C1965,125 1965,330 1440,330" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-input" data-cat="workspace" data-file="ws_outputs/架构蓝图.md_1" data-role="r4_3" id="ws_outputs/架构蓝图.md_1__r4_3"/>
+<path d="M2490,125 C2255,125 2255,105 2020,105" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-input" data-cat="workspace" data-file="ws_outputs/架构蓝图.md_1" data-role="r6_0" id="ws_outputs/架构蓝图.md_1__r6_0"/>
+<path d="M1030,105 C1658,105 1658,125 2286,125" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-output" data-file="ws_outputs/架构蓝图.md_1" data-role="r2_0" id="r2_0__ws_outputs/架构蓝图.md_1"/>
+<path d="M2190,105 C2238,105 2238,147 2286,147" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-output" data-file="ws_outputs/终审裁决书.json_1" data-role="r6_0" id="r6_0__ws_outputs/终审裁决书.json_1"/>
+<path d="M2490,213 C2110,213 2110,105 1730,105" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-input" data-cat="workspace" data-file="ws_process/outputs/R1-问题清单.json_2" data-role="r5_0" id="ws_process/outputs/R1-问题清单.json_2__r5_0"/>
+<path d="M1610,105 C1956,105 1956,213 2302,213" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-output" data-file="ws_process/outputs/R1-问题清单.json_2" data-role="r4_0" id="r4_0__ws_process/outputs/R1-问题清单.json_2"/>
+<path d="M2490,235 C2110,235 2110,105 1730,105" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-input" data-cat="workspace" data-file="ws_process/outputs/R2-问题清单.json_2" data-role="r5_0" id="ws_process/outputs/R2-问题清单.json_2__r5_0"/>
+<path d="M1610,180 C1956,180 1956,235 2302,235" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-output" data-file="ws_process/outputs/R2-问题清单.json_2" data-role="r4_1" id="r4_1__ws_process/outputs/R2-问题清单.json_2"/>
+<path d="M2490,257 C2110,257 2110,105 1730,105" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-input" data-cat="workspace" data-file="ws_process/outputs/R3-问题清单.json_2" data-role="r5_0" id="ws_process/outputs/R3-问题清单.json_2__r5_0"/>
+<path d="M1610,255 C1956,255 1956,257 2302,257" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-output" data-file="ws_process/outputs/R3-问题清单.json_2" data-role="r4_2" id="r4_2__ws_process/outputs/R3-问题清单.json_2"/>
+<path d="M2490,279 C2110,279 2110,105 1730,105" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-input" data-cat="workspace" data-file="ws_process/outputs/R4-问题清单.json_2" data-role="r5_0" id="ws_process/outputs/R4-问题清单.json_2__r5_0"/>
+<path d="M1610,330 C1956,330 1956,279 2302,279" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-output" data-file="ws_process/outputs/R4-问题清单.json_2" data-role="r4_3" id="r4_3__ws_process/outputs/R4-问题清单.json_2"/>
+<path d="M2190,105 C2246,105 2246,301 2302,301" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-output" data-file="ws_process/outputs/REQ-ID增补审批.json_2" data-role="r6_0" id="r6_0__ws_process/outputs/REQ-ID增补审批.json_2"/>
+<path d="M1320,105 C1811,105 1811,323 2302,323" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-output" data-file="ws_process/outputs/架构设计师-validation.json_2" data-role="r3_0" id="r3_0__ws_process/outputs/架构设计师-validation.json_2"/>
+<path d="M2490,345 C2255,345 2255,105 2020,105" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-input" data-cat="workspace" data-file="ws_process/outputs/红队综合裁决.json_2" data-role="r6_0" id="ws_process/outputs/红队综合裁决.json_2__r6_0"/>
+<path d="M1900,105 C2101,105 2101,345 2302,345" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-output" data-file="ws_process/outputs/红队综合裁决.json_2" data-role="r5_0" id="r5_0__ws_process/outputs/红队综合裁决.json_2"/>
+<path d="M740,105 C1521,105 1521,367 2302,367" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-output" data-file="ws_process/outputs/需求分析师-validation.json_2" data-role="r1_0" id="r1_0__ws_process/outputs/需求分析师-validation.json_2"/>
+<path d="M2490,389 C1530,389 1530,105 570,105" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-input" data-cat="workspace" data-file="ws_process/outputs/需求澄清请求.md_2" data-role="r1_0" id="ws_process/outputs/需求澄清请求.md_2__r1_0"/>
+<path d="M450,105 C1376,105 1376,389 2302,389" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-output" data-file="ws_process/outputs/需求澄清请求.md_2" data-role="r0_0" id="r0_0__ws_process/outputs/需求澄清请求.md_2"/>
+<path d="M470,51 C375,51 375,105 280,105" stroke="#fbbf24" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-input" data-cat="external" data-file="ext_0" data-role="r0_0" id="ext_0__r0_0"/>
+<path d="M470,51 C520,51 520,105 570,105" stroke="#fbbf24" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-input" data-cat="external" data-file="ext_0" data-role="r1_0" id="ext_0__r1_0"/>
+</g>
+<g class="node-role" data-nid="r0_0" data-rn="需求分析师" transform="translate(280,80)">
+<rect width="170" height="50" rx="8" fill="#1e3a5f" stroke="#60a5fa" stroke-width="2"/>
+<text x="85.0" y="20" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="600">🚀 需求分析师</text>
+<text x="85.0" y="38" text-anchor="middle" fill="#64748b" font-size="9">manual</text>
+</g>
+<g class="node-role" data-nid="r1_0" data-rn="需求分析师校验" transform="translate(570,80)">
+<rect width="170" height="50" rx="8" fill="#1a3622" stroke="#4ade80" stroke-width="2"/>
+<text x="85.0" y="20" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="600">🟢 需求分析师校验</text>
+<text x="85.0" y="38" text-anchor="middle" fill="#64748b" font-size="9">auto</text>
+</g>
+<g class="node-role" data-nid="r2_0" data-rn="架构设计师" transform="translate(860,80)">
+<rect width="170" height="50" rx="8" fill="#1a3622" stroke="#4ade80" stroke-width="2"/>
+<text x="85.0" y="20" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="600">🟢 架构设计师</text>
+<text x="85.0" y="38" text-anchor="middle" fill="#64748b" font-size="9">auto</text>
+</g>
+<g class="node-role" data-nid="r3_0" data-rn="架构设计师校验" transform="translate(1150,80)">
+<rect width="170" height="50" rx="8" fill="#1a3622" stroke="#4ade80" stroke-width="2"/>
+<text x="85.0" y="20" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="600">🟢 架构设计师校验</text>
+<text x="85.0" y="38" text-anchor="middle" fill="#64748b" font-size="9">auto</text>
+</g>
+<g class="node-role" data-nid="r4_0" data-rn="结构红队" transform="translate(1440,80)">
+<rect width="170" height="50" rx="8" fill="#1a3622" stroke="#4ade80" stroke-width="2"/>
+<text x="85.0" y="20" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="600">🟢 结构红队</text>
+<text x="85.0" y="38" text-anchor="middle" fill="#64748b" font-size="9">auto</text>
+</g>
+<g class="node-role" data-nid="r4_1" data-rn="边界红队" transform="translate(1440,155)">
+<rect width="170" height="50" rx="8" fill="#1a3622" stroke="#4ade80" stroke-width="2"/>
+<text x="85.0" y="20" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="600">🟢 边界红队</text>
+<text x="85.0" y="38" text-anchor="middle" fill="#64748b" font-size="9">auto</text>
+</g>
+<g class="node-role" data-nid="r4_2" data-rn="极限红队" transform="translate(1440,230)">
+<rect width="170" height="50" rx="8" fill="#1a3622" stroke="#4ade80" stroke-width="2"/>
+<text x="85.0" y="20" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="600">🟢 极限红队</text>
+<text x="85.0" y="38" text-anchor="middle" fill="#64748b" font-size="9">auto</text>
+</g>
+<g class="node-role" data-nid="r4_3" data-rn="质量红队" transform="translate(1440,305)">
+<rect width="170" height="50" rx="8" fill="#1a3622" stroke="#4ade80" stroke-width="2"/>
+<text x="85.0" y="20" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="600">🟢 质量红队</text>
+<text x="85.0" y="38" text-anchor="middle" fill="#64748b" font-size="9">auto</text>
+</g>
+<g class="node-role" data-nid="r5_0" data-rn="红队校验角色" transform="translate(1730,80)">
+<rect width="170" height="50" rx="8" fill="#1a3622" stroke="#4ade80" stroke-width="2"/>
+<text x="85.0" y="20" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="600">🟢 红队校验角色</text>
+<text x="85.0" y="38" text-anchor="middle" fill="#64748b" font-size="9">auto</text>
+</g>
+<g class="node-role" data-nid="r6_0" data-rn="终审裁决者" transform="translate(2020,80)">
+<rect width="170" height="50" rx="8" fill="#1a3622" stroke="#4ade80" stroke-width="2"/>
+<text x="85.0" y="20" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="600">🏁 终审裁决者</text>
+<text x="85.0" y="38" text-anchor="middle" fill="#64748b" font-size="9">auto</text>
+</g>
+<g class="tree-dir" transform="translate(10,70)">
+<text x="0" y="14" fill="#818cf8" font-size="11" opacity="0.6">📁 knowledge</text>
+</g>
+<g class="node-file" data-nid="kn_knowledge/C1路由语义说明.md_1" data-cat="knowledge" data-path="knowledge/C1路由语义说明.md" transform="translate(26,92)" opacity="1">
+<rect width="204" height="22" rx="4" fill="rgba(49,46,129,0.4)" stroke="rgba(165,180,252,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#a5b4fc" font-size="10">✅ C1路由语义说明</text>
+</g>
+<g class="node-file" data-nid="kn_knowledge/L2需求规格校验清单.md_1" data-cat="knowledge" data-path="knowledge/L2需求规格校验清单.md" transform="translate(26,114)" opacity="1">
+<rect width="204" height="22" rx="4" fill="rgba(49,46,129,0.4)" stroke="rgba(165,180,252,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#a5b4fc" font-size="10">✅ L2需求规格校验清单</text>
+</g>
+<g class="node-file" data-nid="kn_knowledge/L2需求规格编写指南.md_1" data-cat="knowledge" data-path="knowledge/L2需求规格编写指南.md" transform="translate(26,136)" opacity="1">
+<rect width="204" height="22" rx="4" fill="rgba(49,46,129,0.4)" stroke="rgba(165,180,252,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#a5b4fc" font-size="10">✅ L2需求规格编写指南</text>
+</g>
+<g class="node-file" data-nid="kn_knowledge/L2需求规格设计原则.md_1" data-cat="knowledge" data-path="knowledge/L2需求规格设计原则.md" transform="translate(26,158)" opacity="1">
+<rect width="204" height="22" rx="4" fill="rgba(49,46,129,0.4)" stroke="rgba(165,180,252,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#a5b4fc" font-size="10">✅ L2需求规格设计原则</text>
+</g>
+<g class="node-file" data-nid="kn_knowledge/REQ-ID增补流程.md_1" data-cat="knowledge" data-path="knowledge/REQ-ID增补流程.md" transform="translate(26,180)" opacity="1">
+<rect width="204" height="22" rx="4" fill="rgba(49,46,129,0.4)" stroke="rgba(165,180,252,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#a5b4fc" font-size="10">✅ REQ-ID增补流程</text>
+</g>
+<g class="node-file" data-nid="kn_knowledge/SDK陷阱规避.md_1" data-cat="knowledge" data-path="knowledge/SDK陷阱规避.md" transform="translate(26,202)" opacity="1">
+<rect width="204" height="22" rx="4" fill="rgba(49,46,129,0.4)" stroke="rgba(165,180,252,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#a5b4fc" font-size="10">✅ SDK陷阱规避</text>
+</g>
+<g class="node-file" data-nid="kn_knowledge/严重度判定准则.md_1" data-cat="knowledge" data-path="knowledge/严重度判定准则.md" transform="translate(26,224)" opacity="1">
+<rect width="204" height="22" rx="4" fill="rgba(49,46,129,0.4)" stroke="rgba(165,180,252,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#a5b4fc" font-size="10">✅ 严重度判定准则</text>
+</g>
+<g class="node-file" data-nid="kn_knowledge/对抗维度与检查清单.md_1" data-cat="knowledge" data-path="knowledge/对抗维度与检查清单.md" transform="translate(26,246)" opacity="1">
+<rect width="204" height="22" rx="4" fill="rgba(49,46,129,0.4)" stroke="rgba(165,180,252,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#a5b4fc" font-size="10">✅ 对抗维度与检查清单</text>
+</g>
+<g class="node-file" data-nid="kn_knowledge/归档策略.md_1" data-cat="knowledge" data-path="knowledge/归档策略.md" transform="translate(26,268)" opacity="1">
+<rect width="204" height="22" rx="4" fill="rgba(49,46,129,0.4)" stroke="rgba(165,180,252,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#a5b4fc" font-size="10">✅ 归档策略</text>
+</g>
+<g class="node-file" data-nid="kn_knowledge/架构蓝图校验清单.md_1" data-cat="knowledge" data-path="knowledge/架构蓝图校验清单.md" transform="translate(26,290)" opacity="1">
+<rect width="204" height="22" rx="4" fill="rgba(49,46,129,0.4)" stroke="rgba(165,180,252,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#a5b4fc" font-size="10">✅ 架构蓝图校验清单</text>
+</g>
+<g class="node-file" data-nid="kn_knowledge/架构蓝图规范.md_1" data-cat="knowledge" data-path="knowledge/架构蓝图规范.md" transform="translate(26,312)" opacity="1">
+<rect width="204" height="22" rx="4" fill="rgba(49,46,129,0.4)" stroke="rgba(165,180,252,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#a5b4fc" font-size="10">✅ 架构蓝图规范</text>
+</g>
+<g class="node-file" data-nid="kn_knowledge/架构蓝图设计原则.md_1" data-cat="knowledge" data-path="knowledge/架构蓝图设计原则.md" transform="translate(26,334)" opacity="1">
+<rect width="204" height="22" rx="4" fill="rgba(49,46,129,0.4)" stroke="rgba(165,180,252,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#a5b4fc" font-size="10">✅ 架构蓝图设计原则</text>
+</g>
+<g class="node-file" data-nid="kn_knowledge/红队通用方法论.md_1" data-cat="knowledge" data-path="knowledge/红队通用方法论.md" transform="translate(26,356)" opacity="1">
+<rect width="204" height="22" rx="4" fill="rgba(49,46,129,0.4)" stroke="rgba(165,180,252,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#a5b4fc" font-size="10">✅ 红队通用方法论</text>
+</g>
+<g class="node-file" data-nid="kn_knowledge/轮内迭代与终审判定.md_1" data-cat="knowledge" data-path="knowledge/轮内迭代与终审判定.md" transform="translate(26,378)" opacity="1">
+<rect width="204" height="22" rx="4" fill="rgba(49,46,129,0.4)" stroke="rgba(165,180,252,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#a5b4fc" font-size="10">✅ 轮内迭代与终审判定</text>
+</g>
+<g class="tree-dir" transform="translate(2270,70)">
+<text x="0" y="14" fill="#4ade80" font-size="11" opacity="0.6">📁 outputs</text>
+</g>
+<g class="node-file" data-nid="ws_outputs/需求规格文档.md_1" data-cat="workspace" data-path="outputs/需求规格文档.md" transform="translate(2286,92)" opacity="0.4">
+<rect width="204" height="22" rx="4" fill="rgba(26,54,34,0.4)" stroke="rgba(74,222,128,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#4ade80" font-size="10">❌ L2需求规格文档</text>
+</g>
+<g class="node-file" data-nid="ws_outputs/架构蓝图.md_1" data-cat="workspace" data-path="outputs/架构蓝图.md" transform="translate(2286,114)" opacity="0.4">
+<rect width="204" height="22" rx="4" fill="rgba(26,54,34,0.4)" stroke="rgba(74,222,128,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#4ade80" font-size="10">❌ 架构蓝图</text>
+</g>
+<g class="node-file" data-nid="ws_outputs/终审裁决书.json_1" data-cat="workspace" data-path="outputs/终审裁决书.json" transform="translate(2286,136)" opacity="0.4">
+<rect width="204" height="22" rx="4" fill="rgba(26,54,34,0.4)" stroke="rgba(74,222,128,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#4ade80" font-size="10">❌ 终审裁决书</text>
+</g>
+<g class="tree-dir" transform="translate(2270,158)">
+<text x="0" y="14" fill="#4ade80" font-size="11" opacity="0.6">📁 process</text>
+</g>
+<g class="tree-dir" transform="translate(2270,180)">
+<text x="0" y="14" fill="#4ade80" font-size="11" opacity="0.6">📁 outputs</text>
+</g>
+<g class="node-file" data-nid="ws_process/outputs/R1-问题清单.json_2" data-cat="workspace" data-path="process/outputs/R1-问题清单.json" transform="translate(2302,202)" opacity="0.4">
+<rect width="188" height="22" rx="4" fill="rgba(26,54,34,0.4)" stroke="rgba(74,222,128,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#4ade80" font-size="10">❌ R1问题清单</text>
+</g>
+<g class="node-file" data-nid="ws_process/outputs/R2-问题清单.json_2" data-cat="workspace" data-path="process/outputs/R2-问题清单.json" transform="translate(2302,224)" opacity="0.4">
+<rect width="188" height="22" rx="4" fill="rgba(26,54,34,0.4)" stroke="rgba(74,222,128,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#4ade80" font-size="10">❌ R2问题清单</text>
+</g>
+<g class="node-file" data-nid="ws_process/outputs/R3-问题清单.json_2" data-cat="workspace" data-path="process/outputs/R3-问题清单.json" transform="translate(2302,246)" opacity="0.4">
+<rect width="188" height="22" rx="4" fill="rgba(26,54,34,0.4)" stroke="rgba(74,222,128,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#4ade80" font-size="10">❌ R3问题清单</text>
+</g>
+<g class="node-file" data-nid="ws_process/outputs/R4-问题清单.json_2" data-cat="workspace" data-path="process/outputs/R4-问题清单.json" transform="translate(2302,268)" opacity="0.4">
+<rect width="188" height="22" rx="4" fill="rgba(26,54,34,0.4)" stroke="rgba(74,222,128,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#4ade80" font-size="10">❌ R4问题清单</text>
+</g>
+<g class="node-file" data-nid="ws_process/outputs/REQ-ID增补审批.json_2" data-cat="workspace" data-path="process/outputs/REQ-ID增补审批.json" transform="translate(2302,290)" opacity="0.4">
+<rect width="188" height="22" rx="4" fill="rgba(26,54,34,0.4)" stroke="rgba(74,222,128,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#4ade80" font-size="10">❌ REQ-ID增补审批</text>
+</g>
+<g class="node-file" data-nid="ws_process/outputs/架构设计师-validation.json_2" data-cat="workspace" data-path="process/outputs/架构设计师-validation.json" transform="translate(2302,312)" opacity="0.4">
+<rect width="188" height="22" rx="4" fill="rgba(26,54,34,0.4)" stroke="rgba(74,222,128,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#4ade80" font-size="10">❌ 架构设计师校验报告</text>
+</g>
+<g class="node-file" data-nid="ws_process/outputs/红队综合裁决.json_2" data-cat="workspace" data-path="process/outputs/红队综合裁决.json" transform="translate(2302,334)" opacity="0.4">
+<rect width="188" height="22" rx="4" fill="rgba(26,54,34,0.4)" stroke="rgba(74,222,128,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#4ade80" font-size="10">❌ 红队综合裁决</text>
+</g>
+<g class="node-file" data-nid="ws_process/outputs/需求分析师-validation.json_2" data-cat="workspace" data-path="process/outputs/需求分析师-validation.json" transform="translate(2302,356)" opacity="0.4">
+<rect width="188" height="22" rx="4" fill="rgba(26,54,34,0.4)" stroke="rgba(74,222,128,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#4ade80" font-size="10">❌ 需求分析师校验报告</text>
+</g>
+<g class="node-file" data-nid="ws_process/outputs/需求澄清请求.md_2" data-cat="workspace" data-path="process/outputs/需求澄清请求.md" transform="translate(2302,378)" opacity="0.4">
+<rect width="188" height="22" rx="4" fill="rgba(26,54,34,0.4)" stroke="rgba(74,222,128,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#4ade80" font-size="10">❌ 需求澄清请求</text>
+</g>
+<g class="node-file" data-nid="ext_0" data-cat="external" data-path="00-需求描述.md" transform="translate(280,40)">
+<rect width="190" height="22" rx="4" fill="rgba(59,42,14,0.4)" stroke="rgba(251,191,36,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#fbbf24" font-size="10">✅ L1原始诉求</text>
+</g>
+</svg>
+</div></div>
+<div id="tt"></div>
+<script>
+const R={"r0_0": {"name": "需求分析师", "confirm": "manual", "skill": "roles/需求分析师/skill.md", "skill_exists": true, "verdicts": ["confirmed"], "inputs": [{"name": "L1原始诉求", "path": "00-需求描述.md", "exists": true, "cat": "external"}], "outputs": [{"name": "L2需求规格文档", "path": "outputs/需求规格文档.md", "exists": false, "cat": "workspace"}, {"name": "需求澄清请求", "path": "process/outputs/需求澄清请求.md", "exists": false, "cat": "workspace"}], "knowledge": [], "out_edges": [{"v": "confirmed", "t": "需求分析师校验", "max": null, "c": 0}], "in_edges": [{"f": "需求分析师", "v": "confirmed"}], "input_files": ["00-需求描述.md"], "output_files": ["outputs/需求规格文档.md", "process/outputs/需求澄清请求.md"], "kn_paths": []}, "r1_0": {"name": "需求分析师校验", "confirm": "auto", "skill": "roles/需求分析师校验/skill.md", "skill_exists": true, "verdicts": ["confirmed", "loop"], "inputs": [{"name": "L2需求规格文档", "path": "outputs/需求规格文档.md", "exists": false, "cat": "workspace"}, {"name": "需求澄清请求", "path": "process/outputs/需求澄清请求.md", "exists": false, "cat": "workspace"}, {"name": "L1原始诉求", "path": "00-需求描述.md", "exists": true, "cat": "external"}], "outputs": [{"name": "需求分析师校验报告", "path": "process/outputs/需求分析师-validation.json", "exists": false, "cat": "workspace"}], "knowledge": [], "out_edges": [{"v": "confirmed", "t": "架构设计师", "max": null, "c": 0}, {"v": "loop", "t": "需求分析师", "max": null, "c": 0}], "in_edges": [{"f": "需求分析师校验", "v": "confirmed"}, {"f": "需求分析师校验", "v": "loop"}], "input_files": ["outputs/需求规格文档.md", "process/outputs/需求澄清请求.md", "00-需求描述.md"], "output_files": ["process/outputs/需求分析师-validation.json"], "kn_paths": []}, "r2_0": {"name": "架构设计师", "confirm": "auto", "skill": "roles/架构设计师/skill.md", "skill_exists": true, "verdicts": ["blueprint_v1_ready"], "inputs": [{"name": "L2需求规格文档", "path": "outputs/需求规格文档.md", "exists": false, "cat": "workspace"}], "outputs": [{"name": "架构蓝图", "path": "outputs/架构蓝图.md", "exists": false, "cat": "workspace"}], "knowledge": [], "out_edges": [{"v": "blueprint_v1_ready", "t": "架构设计师校验", "max": null, "c": 0}], "in_edges": [{"f": "架构设计师", "v": "blueprint_v1_ready"}], "input_files": ["outputs/需求规格文档.md"], "output_files": ["outputs/架构蓝图.md"], "kn_paths": []}, "r3_0": {"name": "架构设计师校验", "confirm": "auto", "skill": "roles/架构设计师校验/skill.md", "skill_exists": true, "verdicts": ["blueprint_v1_ready", "loop", "unregistered_requirement"], "inputs": [{"name": "L2需求规格文档", "path": "outputs/需求规格文档.md", "exists": false, "cat": "workspace"}, {"name": "架构蓝图", "path": "outputs/架构蓝图.md", "exists": false, "cat": "workspace"}], "outputs": [{"name": "架构设计师校验报告", "path": "process/outputs/架构设计师-validation.json", "exists": false, "cat": "workspace"}], "knowledge": [], "out_edges": [{"v": "loop", "t": "架构设计师", "max": null, "c": 2}, {"v": "blueprint_v1_ready", "t": "结构红队", "max": null, "c": 0}, {"v": "blueprint_v1_ready", "t": "边界红队", "max": null, "c": 0}, {"v": "blueprint_v1_ready", "t": "极限红队", "max": null, "c": 0}, {"v": "blueprint_v1_ready", "t": "质量红队", "max": null, "c": 0}, {"v": "unregistered_requirement", "t": "终审裁决者", "max": null, "c": 0}], "in_edges": [{"f": "架构设计师校验", "v": "loop"}, {"f": "架构设计师校验", "v": "blueprint_v1_ready"}, {"f": "架构设计师校验", "v": "blueprint_v1_ready"}, {"f": "架构设计师校验", "v": "blueprint_v1_ready"}, {"f": "架构设计师校验", "v": "blueprint_v1_ready"}, {"f": "架构设计师校验", "v": "unregistered_requirement"}], "input_files": ["outputs/需求规格文档.md", "outputs/架构蓝图.md"], "output_files": ["process/outputs/架构设计师-validation.json"], "kn_paths": []}, "r4_0": {"name": "结构红队", "confirm": "auto", "skill": "roles/结构红队/skill.md", "skill_exists": true, "verdicts": [], "inputs": [{"name": "L2需求规格文档", "path": "outputs/需求规格文档.md", "exists": false, "cat": "workspace"}, {"name": "架构蓝图", "path": "outputs/架构蓝图.md", "exists": false, "cat": "workspace"}], "outputs": [{"name": "R1问题清单", "path": "process/outputs/R1-问题清单.json", "exists": false, "cat": "workspace"}], "knowledge": [], "out_edges": [], "in_edges": [{"f": "结构红队 + 边界红队 + 极限红队 + 质量红队", "v": ""}], "input_files": ["outputs/需求规格文档.md", "outputs/架构蓝图.md"], "output_files": ["process/outputs/R1-问题清单.json"], "kn_paths": []}, "r4_1": {"name": "边界红队", "confirm": "auto", "skill": "roles/边界红队/skill.md", "skill_exists": true, "verdicts": [], "inputs": [{"name": "L2需求规格文档", "path": "outputs/需求规格文档.md", "exists": false, "cat": "workspace"}, {"name": "架构蓝图", "path": "outputs/架构蓝图.md", "exists": false, "cat": "workspace"}], "outputs": [{"name": "R2问题清单", "path": "process/outputs/R2-问题清单.json", "exists": false, "cat": "workspace"}], "knowledge": [], "out_edges": [], "in_edges": [{"f": "结构红队 + 边界红队 + 极限红队 + 质量红队", "v": ""}], "input_files": ["outputs/需求规格文档.md", "outputs/架构蓝图.md"], "output_files": ["process/outputs/R2-问题清单.json"], "kn_paths": []}, "r4_2": {"name": "极限红队", "confirm": "auto", "skill": "roles/极限红队/skill.md", "skill_exists": true, "verdicts": [], "inputs": [{"name": "L2需求规格文档", "path": "outputs/需求规格文档.md", "exists": false, "cat": "workspace"}, {"name": "架构蓝图", "path": "outputs/架构蓝图.md", "exists": false, "cat": "workspace"}], "outputs": [{"name": "R3问题清单", "path": "process/outputs/R3-问题清单.json", "exists": false, "cat": "workspace"}], "knowledge": [], "out_edges": [], "in_edges": [{"f": "结构红队 + 边界红队 + 极限红队 + 质量红队", "v": ""}], "input_files": ["outputs/需求规格文档.md", "outputs/架构蓝图.md"], "output_files": ["process/outputs/R3-问题清单.json"], "kn_paths": []}, "r4_3": {"name": "质量红队", "confirm": "auto", "skill": "roles/质量红队/skill.md", "skill_exists": true, "verdicts": [], "inputs": [{"name": "L2需求规格文档", "path": "outputs/需求规格文档.md", "exists": false, "cat": "workspace"}, {"name": "架构蓝图", "path": "outputs/架构蓝图.md", "exists": false, "cat": "workspace"}], "outputs": [{"name": "R4问题清单", "path": "process/outputs/R4-问题清单.json", "exists": false, "cat": "workspace"}], "knowledge": [], "out_edges": [], "in_edges": [{"f": "结构红队 + 边界红队 + 极限红队 + 质量红队", "v": ""}], "input_files": ["outputs/需求规格文档.md", "outputs/架构蓝图.md"], "output_files": ["process/outputs/R4-问题清单.json"], "kn_paths": []}, "r5_0": {"name": "红队校验角色", "confirm": "auto", "skill": "roles/红队校验角色/skill.md", "skill_exists": true, "verdicts": ["all_passed", "issues_found"], "inputs": [{"name": "R1问题清单", "path": "process/outputs/R1-问题清单.json", "exists": false, "cat": "workspace"}, {"name": "R2问题清单", "path": "process/outputs/R2-问题清单.json", "exists": false, "cat": "workspace"}, {"name": "R3问题清单", "path": "process/outputs/R3-问题清单.json", "exists": false, "cat": "workspace"}, {"name": "R4问题清单", "path": "process/outputs/R4-问题清单.json", "exists": false, "cat": "workspace"}], "outputs": [{"name": "红队综合裁决", "path": "process/outputs/红队综合裁决.json", "exists": false, "cat": "workspace"}], "knowledge": [], "out_edges": [{"v": "all_passed", "t": "终审裁决者", "max": null, "c": 0}, {"v": "issues_found", "t": "架构设计师", "max": null, "c": 5}], "in_edges": [{"f": "红队校验角色", "v": "all_passed"}, {"f": "红队校验角色", "v": "issues_found"}], "input_files": ["process/outputs/R1-问题清单.json", "process/outputs/R2-问题清单.json", "process/outputs/R3-问题清单.json", "process/outputs/R4-问题清单.json"], "output_files": ["process/outputs/红队综合裁决.json"], "kn_paths": []}, "r6_0": {"name": "终审裁决者", "confirm": "auto", "skill": "roles/终审裁决者/skill.md", "skill_exists": true, "verdicts": ["consistency_defect", "passed", "reqid_approved", "reqid_rejected", "terminated"], "inputs": [{"name": "L2需求规格文档", "path": "outputs/需求规格文档.md", "exists": false, "cat": "workspace"}, {"name": "架构蓝图", "path": "outputs/架构蓝图.md", "exists": false, "cat": "workspace"}, {"name": "红队综合裁决", "path": "process/outputs/红队综合裁决.json", "exists": false, "cat": "workspace"}], "outputs": [{"name": "终审裁决书", "path": "outputs/终审裁决书.json", "exists": false, "cat": "workspace"}, {"name": "REQ-ID增补审批", "path": "process/outputs/REQ-ID增补审批.json", "exists": false, "cat": "workspace"}], "knowledge": [], "out_edges": [{"v": "passed", "t": "完成", "max": null, "c": 0}, {"v": "consistency_defect", "t": "架构设计师", "max": 2, "c": 2}, {"v": "terminated", "t": "完成", "max": null, "c": 0}, {"v": "reqid_approved", "t": "需求分析师", "max": 2, "c": 2}, {"v": "reqid_rejected", "t": "架构设计师", "max": null, "c": 2}], "in_edges": [{"f": "终审裁决者", "v": "passed"}, {"f": "终审裁决者", "v": "consistency_defect"}, {"f": "终审裁决者", "v": "terminated"}, {"f": "终审裁决者", "v": "reqid_approved"}, {"f": "终审裁决者", "v": "reqid_rejected"}], "input_files": ["outputs/需求规格文档.md", "outputs/架构蓝图.md", "process/outputs/红队综合裁决.json"], "output_files": ["outputs/终审裁决书.json", "process/outputs/REQ-ID增补审批.json"], "kn_paths": []}},F={"kn_knowledge/C1路由语义说明.md_1": {"name": "C1路由语义说明", "path": "knowledge/C1路由语义说明.md", "cat": "knowledge", "exists": true, "producers": [], "consumers": []}, "kn_knowledge/L2需求规格校验清单.md_1": {"name": "L2需求规格校验清单", "path": "knowledge/L2需求规格校验清单.md", "cat": "knowledge", "exists": true, "producers": [], "consumers": []}, "kn_knowledge/L2需求规格编写指南.md_1": {"name": "L2需求规格编写指南", "path": "knowledge/L2需求规格编写指南.md", "cat": "knowledge", "exists": true, "producers": [], "consumers": []}, "kn_knowledge/L2需求规格设计原则.md_1": {"name": "L2需求规格设计原则", "path": "knowledge/L2需求规格设计原则.md", "cat": "knowledge", "exists": true, "producers": [], "consumers": []}, "kn_knowledge/REQ-ID增补流程.md_1": {"name": "REQ-ID增补流程", "path": "knowledge/REQ-ID增补流程.md", "cat": "knowledge", "exists": true, "producers": [], "consumers": []}, "kn_knowledge/SDK陷阱规避.md_1": {"name": "SDK陷阱规避", "path": "knowledge/SDK陷阱规避.md", "cat": "knowledge", "exists": true, "producers": [], "consumers": []}, "kn_knowledge/严重度判定准则.md_1": {"name": "严重度判定准则", "path": "knowledge/严重度判定准则.md", "cat": "knowledge", "exists": true, "producers": [], "consumers": []}, "kn_knowledge/对抗维度与检查清单.md_1": {"name": "对抗维度与检查清单", "path": "knowledge/对抗维度与检查清单.md", "cat": "knowledge", "exists": true, "producers": [], "consumers": []}, "kn_knowledge/归档策略.md_1": {"name": "归档策略", "path": "knowledge/归档策略.md", "cat": "knowledge", "exists": true, "producers": [], "consumers": []}, "kn_knowledge/架构蓝图校验清单.md_1": {"name": "架构蓝图校验清单", "path": "knowledge/架构蓝图校验清单.md", "cat": "knowledge", "exists": true, "producers": [], "consumers": []}, "kn_knowledge/架构蓝图规范.md_1": {"name": "架构蓝图规范", "path": "knowledge/架构蓝图规范.md", "cat": "knowledge", "exists": true, "producers": [], "consumers": []}, "kn_knowledge/架构蓝图设计原则.md_1": {"name": "架构蓝图设计原则", "path": "knowledge/架构蓝图设计原则.md", "cat": "knowledge", "exists": true, "producers": [], "consumers": []}, "kn_knowledge/红队通用方法论.md_1": {"name": "红队通用方法论", "path": "knowledge/红队通用方法论.md", "cat": "knowledge", "exists": true, "producers": [], "consumers": []}, "kn_knowledge/轮内迭代与终审判定.md_1": {"name": "轮内迭代与终审判定", "path": "knowledge/轮内迭代与终审判定.md", "cat": "knowledge", "exists": true, "producers": [], "consumers": []}, "ws_outputs/需求规格文档.md_1": {"name": "L2需求规格文档", "path": "outputs/需求规格文档.md", "cat": "workspace", "exists": false, "producers": ["需求分析师"], "consumers": ["需求分析师校验", "架构设计师", "架构设计师校验", "结构红队", "边界红队", "极限红队", "质量红队", "终审裁决者"]}, "ws_outputs/架构蓝图.md_1": {"name": "架构蓝图", "path": "outputs/架构蓝图.md", "cat": "workspace", "exists": false, "producers": ["架构设计师"], "consumers": ["架构设计师校验", "结构红队", "边界红队", "极限红队", "质量红队", "终审裁决者"]}, "ws_outputs/终审裁决书.json_1": {"name": "终审裁决书", "path": "outputs/终审裁决书.json", "cat": "workspace", "exists": false, "producers": ["终审裁决者"], "consumers": []}, "ws_process/outputs/R1-问题清单.json_2": {"name": "R1问题清单", "path": "process/outputs/R1-问题清单.json", "cat": "workspace", "exists": false, "producers": ["结构红队"], "consumers": ["红队校验角色"]}, "ws_process/outputs/R2-问题清单.json_2": {"name": "R2问题清单", "path": "process/outputs/R2-问题清单.json", "cat": "workspace", "exists": false, "producers": ["边界红队"], "consumers": ["红队校验角色"]}, "ws_process/outputs/R3-问题清单.json_2": {"name": "R3问题清单", "path": "process/outputs/R3-问题清单.json", "cat": "workspace", "exists": false, "producers": ["极限红队"], "consumers": ["红队校验角色"]}, "ws_process/outputs/R4-问题清单.json_2": {"name": "R4问题清单", "path": "process/outputs/R4-问题清单.json", "cat": "workspace", "exists": false, "producers": ["质量红队"], "consumers": ["红队校验角色"]}, "ws_process/outputs/REQ-ID增补审批.json_2": {"name": "REQ-ID增补审批", "path": "process/outputs/REQ-ID增补审批.json", "cat": "workspace", "exists": false, "producers": ["终审裁决者"], "consumers": []}, "ws_process/outputs/架构设计师-validation.json_2": {"name": "架构设计师校验报告", "path": "process/outputs/架构设计师-validation.json", "cat": "workspace", "exists": false, "producers": ["架构设计师校验"], "consumers": []}, "ws_process/outputs/红队综合裁决.json_2": {"name": "红队综合裁决", "path": "process/outputs/红队综合裁决.json", "cat": "workspace", "exists": false, "producers": ["红队校验角色"], "consumers": ["终审裁决者"]}, "ws_process/outputs/需求分析师-validation.json_2": {"name": "需求分析师校验报告", "path": "process/outputs/需求分析师-validation.json", "cat": "workspace", "exists": false, "producers": ["需求分析师校验"], "consumers": []}, "ws_process/outputs/需求澄清请求.md_2": {"name": "需求澄清请求", "path": "process/outputs/需求澄清请求.md", "cat": "workspace", "exists": false, "producers": ["需求分析师"], "consumers": ["需求分析师校验"]}, "ext_0": {"name": "L1原始诉求", "path": "00-需求描述.md", "cat": "external", "exists": true, "producers": [], "consumers": ["需求分析师", "需求分析师校验"]}};
+var z=1,px=0,py=0,dr=false,sx,sy;
+function at(){document.getElementById('svgc').style.transform='translate('+px+'px,'+py+'px) scale('+z+')';document.getElementById('zv').textContent=Math.round(z*100)+'%';}
+function zb(d){z=Math.max(0.15,Math.min(3,z+d));at();}
+function rv(){z=1;px=0;py=0;at();}
+var cw=document.getElementById('cwrap');
+cw.addEventListener('wheel',function(e){e.preventDefault();zb(e.deltaY>0?-0.08:0.08);});
+cw.addEventListener('mousedown',function(e){if(e.target.closest('.node-role')||e.target.closest('.node-file'))return;dr=true;sx=e.clientX-px;sy=e.clientY-py;cw.style.cursor='grabbing';});
+document.addEventListener('mousemove',function(e){if(!dr)return;px=e.clientX-sx;py=e.clientY-sy;at();});
+document.addEventListener('mouseup',function(){dr=false;cw.style.cursor='';});
+
+function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+function showTT(h,e){var t=document.getElementById('tt');t.innerHTML=h;t.style.display='block';pt(e);}
+function pt(e){var t=document.getElementById('tt');var x=e.clientX+12,y=e.clientY+12;var tw=t.offsetWidth,th=t.offsetHeight;if(x+tw>innerWidth-8)x=e.clientX-tw-12;if(y+th>innerHeight-8)y=innerHeight-th-8;if(y<46)y=46;t.style.left=x+'px';t.style.top=y+'px';}
+function hideTT(){document.getElementById('tt').style.display='none';}
+
+// ═══ 悬停角色：高亮动画 ═══
+function highlightRole(nid){
+  var d=R[nid];if(!d)return;
+  // dim everything
+  document.querySelectorAll('.node-role,.node-file,.tree-dir').forEach(function(el){el.classList.add('node-dim');});
+  // highlight this role
+  var roleEl=document.querySelector('[data-nid="'+nid+'"]');
+  if(roleEl)roleEl.classList.remove('node-dim');
+
+  // highlight input files + green links
+  d.input_files.forEach(function(path){
+    var fid=findFileNid(path);if(!fid)return;
+    var fel=document.querySelector('[data-nid="'+fid+'"]');
+    if(fel){fel.classList.remove('node-dim');fel.classList.add('node-highlight');}
+    var link=document.getElementById(fid+'__'+nid);
+    if(link)link.classList.add('link-active-green');
+  });
+
+  // highlight knowledge + purple links
+  d.kn_paths.forEach(function(path){
+    var fid=findFileNid(path);if(!fid)return;
+    var fel=document.querySelector('[data-nid="'+fid+'"]');
+    if(fel){fel.classList.remove('node-dim');fel.classList.add('node-highlight');}
+    var link=document.getElementById(fid+'__'+nid);
+    if(link)link.classList.add('link-active-kn');
+  });
+
+  // highlight output files + red links
+  d.output_files.forEach(function(path){
+    var fid=findFileNid(path);if(!fid)return;
+    var fel=document.querySelector('[data-nid="'+fid+'"]');
+    if(fel){fel.classList.remove('node-dim');fel.classList.add('node-highlight');}
+    var link=document.getElementById(nid+'__'+fid);
+    if(link)link.classList.add('link-active-red');
+  });
+
+  // highlight verdict links from this role
+  document.querySelectorAll('.link-verdict[data-from="'+nid+'"]').forEach(function(el){
+    el.classList.remove('link-dim');
+    el.style.strokeOpacity='0.8';
+    var to=el.getAttribute('data-to');
+    var tgt=document.querySelector('[data-nid="'+to+'"]');
+    if(tgt)tgt.classList.remove('node-dim');
+  });
+  // verdict links to this role
+  document.querySelectorAll('.link-verdict[data-to="'+nid+'"]').forEach(function(el){
+    el.classList.remove('link-dim');
+    el.style.strokeOpacity='0.8';
+    var from=el.getAttribute('data-from');
+    var src=document.querySelector('[data-nid="'+from+'"]');
+    if(src)src.classList.remove('node-dim');
+  });
+}
+
+function clearHighlight(){
+  document.querySelectorAll('.node-dim').forEach(function(el){el.classList.remove('node-dim');});
+  document.querySelectorAll('.node-highlight').forEach(function(el){el.classList.remove('node-highlight');});
+  document.querySelectorAll('.link-active-green,.link-active-kn,.link-active-red').forEach(function(el){el.classList.remove('link-active-green','link-active-kn','link-active-red');});
+  document.querySelectorAll('.link-verdict').forEach(function(el){el.style.strokeOpacity='';});
+}
+
+function findFileNid(path){
+  var el=document.querySelector('[data-path="'+CSS.escape(path)+'"]');
+  return el?el.getAttribute('data-nid'):null;
+}
+
+function roleTT(nid,e){
+  var d=R[nid];if(!d)return;
+  var h='<div class="th">'+esc(d.name)+'</div><div class="tb">';
+  h+='<div class="ts"><h4>&#9881; Skill</h4><div class="tr"><span class="fp">'+(d.skill_exists?'&#9989;':'&#10060;')+' '+esc(d.skill)+'</span></div></div>';
+  if(d.knowledge.length){h+='<div class="ts"><h4>&#128218; Knowledge ('+d.knowledge.length+')</h4>';d.knowledge.forEach(function(k){h+='<div class="tr"><span class="fn cat-kn">'+(k.exists?'&#9989;':'&#10060;')+' '+esc(k.name)+'</span><span class="fp">'+esc(k.path)+'</span></div>';});h+='</div>';}
+  if(d.inputs.length){h+='<div class="ts"><h4>&#128229; Inputs ('+d.inputs.length+')</h4>';d.inputs.forEach(function(i){var c=i.cat==='knowledge'?'cat-kn':i.cat==='workspace'?'cat-ws':'cat-ext';h+='<div class="tr"><span class="fn '+c+'">'+(i.exists?'&#9989;':'&#10060;')+' '+esc(i.name)+'</span><span class="fp">'+esc(i.path)+'</span></div>';});h+='</div>';}
+  if(d.outputs.length){h+='<div class="ts"><h4>&#128226; Outputs ('+d.outputs.length+')</h4>';d.outputs.forEach(function(o){var c=o.cat==='knowledge'?'cat-kn':o.cat==='workspace'?'cat-ws':'cat-ext';h+='<div class="tr"><span class="fn '+c+'">'+(o.exists?'&#9989;':'&#10060;')+' '+esc(o.name)+'</span><span class="fp">'+esc(o.path)+'</span></div>';});h+='</div>';}
+  if(d.verdicts.length){h+='<div class="ts"><h4>&#9878; Verdict</h4>';d.verdicts.forEach(function(v){h+='<span class="vt">'+esc(v)+'</span>';});h+='</div>';}
+  if(d.out_edges.length){h+='<div class="ts"><h4>&#128279; Out</h4>';d.out_edges.forEach(function(e){var ex='';if(e.max)ex+=' x'+e.max;if(e.c)ex+=' +'+e.c;h+='<div class="er"><span class="ev">'+esc(e.v)+'</span> &#8594; <span class="et">'+esc(e.t)+'</span><span style="color:#475569">'+ex+'</span></div>';});h+='</div>';}
+  h+='</div>';
+  showTT(h,e);
+}
+
+function fileTT(nid,e){
+  var d=F[nid];if(!d)return;
+  var cl={knowledge:['cat-kn','#a5b4fc','Knowledge'],workspace:['cat-ws','#4ade80','Workspace'],external:['cat-ext','#fbbf24','External']}[d.cat];
+  var m=d.exists?'&#9989;':'&#10060;';
+  var h='<div class="th" style="color:'+cl[1]+'">'+m+' '+esc(d.name)+'</div><div class="tb">';
+  h+='<div class="ts"><h4>Path</h4><div class="tr"><span class="fp">'+esc(d.path)+'</span></div></div>';
+  h+='<div class="ts"><h4>Type</h4><div class="tr"><span class="'+cl[0]+'">'+cl[2]+'</span></div></div>';
+  if(d.producers.length){h+='<div class="ts"><h4>&#9999; &#30001;&#35841;&#29983;&#20135;</h4>';d.producers.forEach(function(p){h+='<div class="er"><span class="et">'+esc(p)+'</span></div>';});h+='</div>';}
+  if(d.consumers.length){h+='<div class="ts"><h4>&#128064; &#34987;&#35841;&#35835;&#21462;</h4>';d.consumers.forEach(function(c){h+='<div class="er"><span class="et">'+esc(c)+'</span></div>';});h+='</div>';}
+  h+='</div>';
+  showTT(h,e);
+}
+
+// bind events
+setTimeout(function(){
+  document.querySelectorAll('.node-role').forEach(function(el){
+    var nid=el.getAttribute('data-nid');
+    el.addEventListener('mouseenter',function(e){clearHighlight();highlightRole(nid);roleTT(nid,e);});
+    el.addEventListener('mousemove',pt);
+    el.addEventListener('mouseleave',function(){clearHighlight();hideTT();});
+  });
+  document.querySelectorAll('.node-file').forEach(function(el){
+    var nid=el.getAttribute('data-nid');
+    el.addEventListener('mouseenter',function(e){fileTT(nid,e);});
+    el.addEventListener('mousemove',pt);
+    el.addEventListener('mouseleave',hideTT);
+  });
+},200);
+</script>
+</body></html>

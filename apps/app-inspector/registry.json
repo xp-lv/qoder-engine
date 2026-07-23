@@ -1,0 +1,264 @@
+[
+  {
+    "role_name": "功能明确者",
+    "skill_path": "roles/功能明确者/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "功能规格书",
+        "path": "outputs/功能规格书.md"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "需求描述",
+        "path": "00-需求描述.md"
+      },
+      {
+        "name": "app.yaml结构规范",
+        "path": "knowledge/app.yaml结构规范.md",
+        "type": "knowledge"
+      },
+      {
+        "name": "死链与孤儿检测规则",
+        "path": "knowledge/死链与孤儿检测规则.md",
+        "type": "knowledge"
+      },
+      {
+        "name": "看板可视化规范",
+        "path": "knowledge/看板可视化规范.md",
+        "type": "knowledge"
+      },
+      {
+        "name": "功能规格书编写指南",
+        "path": "knowledge/功能规格书编写指南.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "功能红队"
+      ],
+      [
+        "人工审阅"
+      ],
+      [
+        "功能明确者"
+      ]
+    ],
+    "verdicts": [
+      "spec_ready"
+    ]
+  },
+  {
+    "role_name": "功能红队",
+    "skill_path": "roles/功能红队/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "红队审查报告",
+        "path": "process/outputs/红队审查报告.json"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "功能规格书",
+        "path": "outputs/功能规格书.md"
+      },
+      {
+        "name": "app.yaml结构规范",
+        "path": "knowledge/app.yaml结构规范.md",
+        "type": "knowledge"
+      },
+      {
+        "name": "死链与孤儿检测规则",
+        "path": "knowledge/死链与孤儿检测规则.md",
+        "type": "knowledge"
+      },
+      {
+        "name": "看板可视化规范",
+        "path": "knowledge/看板可视化规范.md",
+        "type": "knowledge"
+      },
+      {
+        "name": "功能规格书编写指南",
+        "path": "knowledge/功能规格书编写指南.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "功能明确者"
+      ],
+      [
+        "功能红队"
+      ]
+    ],
+    "verdicts": [
+      "spec_confirmed",
+      "spec_gaps_found"
+    ]
+  },
+  {
+    "role_name": "人工审阅",
+    "skill_path": "roles/人工审阅/skill.md",
+    "blocking_mode": "manual",
+    "outputs": [
+      {
+        "name": "审阅确认书",
+        "path": "process/outputs/审阅确认书.json"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "功能规格书",
+        "path": "outputs/功能规格书.md"
+      },
+      {
+        "name": "红队审查报告",
+        "path": "process/outputs/红队审查报告.json"
+      },
+      {
+        "name": "看板可视化规范",
+        "path": "knowledge/看板可视化规范.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "功能红队"
+      ],
+      [
+        "人工审阅"
+      ]
+    ],
+    "verdicts": [
+      "confirmed",
+      "need_revisions"
+    ]
+  },
+  {
+    "role_name": "功能实现者",
+    "skill_path": "roles/功能实现者/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "看板程序",
+        "path": "outputs/dashboard.html"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "功能规格书",
+        "path": "outputs/功能规格书.md"
+      },
+      {
+        "name": "看板可视化规范",
+        "path": "knowledge/看板可视化规范.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "人工审阅"
+      ],
+      [
+        "网页红队"
+      ],
+      [
+        "功能实现者"
+      ]
+    ],
+    "verdicts": [
+      "implementation_done"
+    ]
+  },
+  {
+    "role_name": "网页红队",
+    "skill_path": "roles/网页红队/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "验收报告",
+        "path": "process/outputs/网页验收报告.json"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "功能规格书",
+        "path": "outputs/功能规格书.md"
+      },
+      {
+        "name": "看板程序",
+        "path": "outputs/dashboard.html"
+      }
+    ],
+    "input_groups": [
+      [
+        "功能实现者"
+      ],
+      [
+        "网页红队"
+      ]
+    ],
+    "verdicts": [
+      "impl_defects",
+      "passed"
+    ]
+  }
+]

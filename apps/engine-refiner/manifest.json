@@ -1,0 +1,33 @@
+{
+  "schema_version": "2.0",
+  "app_name": "engine-refiner",
+  "paths": {
+    "router": "ROUTER.json",
+    "registry": "registry.json"
+  },
+  "workspace_template": {
+    "dirs": [
+      "knowledge",
+      "outputs"
+    ],
+    "init_files": {},
+    "knowledge_sources": [
+      {
+        "from": "knowledge/引擎代码架构地图.md",
+        "to": "knowledge/引擎代码架构地图.md"
+      },
+      {
+        "from": "knowledge/代码异味识别指南.md",
+        "to": "knowledge/代码异味识别指南.md"
+      },
+      {
+        "from": "knowledge/安全重构原则.md",
+        "to": "knowledge/安全重构原则.md"
+      },
+      {
+        "from": "knowledge/证伪方法论.md",
+        "to": "knowledge/证伪方法论.md"
+      }
+    ]
+  }
+}

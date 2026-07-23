@@ -115,12 +115,10 @@
         "path": "outputs/src/backend/"
       },
       {
-        "name": "name",
-        "path": "后端API服务"
+        "name": "后端API服务"
       },
       {
-        "name": "name",
-        "path": "前端Dev服务"
+        "name": "前端Dev服务"
       }
     ],
     "input_groups": [

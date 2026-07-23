@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>APP Inspector &#8212; app-builder-v2</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+    background: #0f172a; color: #e2e8f0; padding: 24px; line-height: 1.6;
+  }
+  h1 { color: #38bdf8; margin-bottom: 8px; font-size: 28px; }
+  h2 { color: #818cf8; margin: 32px 0 16px; font-size: 22px; border-bottom: 2px solid #334155; padding-bottom: 8px; }
+  h3 { color: #f1f5f9; margin-bottom: 8px; font-size: 18px; }
+  h4 { color: #94a3b8; margin-bottom: 8px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .summary { display: flex; gap: 16px; flex-wrap: wrap; margin: 16px 0 32px; }
+  .summary-item {
+    background: #1e293b; border: 1px solid #334155; border-radius: 8px;
+    padding: 12px 20px; min-width: 120px;
+  }
+  .summary-item .label { color: #64748b; font-size: 12px; text-transform: uppercase; }
+  .summary-item .value { color: #38bdf8; font-size: 20px; font-weight: bold; }
+
+  .mermaid-container {
+    background: #1e293b; border: 1px solid #334155; border-radius: 12px;
+    padding: 24px; overflow-x: auto; margin-bottom: 32px;
+  }
+
+  .role-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 16px; }
+  .role-card {
+    background: #1e293b; border: 1px solid #334155; border-radius: 12px;
+    padding: 20px; transition: border-color 0.2s;
+  }
+  .role-card:hover { border-color: #475569; }
+  .role-card-entry { border-left: 4px solid #ec4899; }
+  .role-card-terminal { border-left: 4px solid #f59e0b; }
+  .role-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
+  .role-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  .badge {
+    font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 500;
+  }
+  .badge-manual { background: #1e3a5f; color: #60a5fa; }
+  .badge-auto { background: #1a3622; color: #4ade80; }
+  .badge-entry { background: #3b1a4a; color: #e879f9; }
+  .badge-terminal { background: #3b2a0e; color: #fbbf24; }
+  .badge-join { background: #0c4a6e; color: #38bdf8; }
+
+  .section { margin-bottom: 16px; }
+  .file-item {
+    display: flex; align-items: center; gap: 8px; padding: 4px 0;
+    font-size: 13px;
+  }
+  .file-icon { width: 16px; text-align: center; font-weight: bold; }
+  .file-exists .file-icon { color: #4ade80; }
+  .file-missing { color: #64748b; }
+  .file-missing .file-icon { color: #f87171; }
+  .file-name { color: #cbd5e1; min-width: 100px; }
+  .file-path { color: #64748b; font-family: monospace; font-size: 12px; }
+
+  .verdict-list { display: flex; flex-wrap: wrap; gap: 6px; }
+  .verdict-tag {
+    background: #312e81; color: #a5b4fc; padding: 2px 10px;
+    border-radius: 12px; font-size: 12px; font-family: monospace;
+    white-space: nowrap;
+  }
+
+  .edge-item { font-size: 13px; padding: 3px 0; color: #94a3b8; }
+  .edge-verdict { color: #a5b4fc; font-family: monospace; }
+  .edge-target { color: #4ade80; }
+  .edge-source { color: #fbbf24; }
+  .edge-extra { color: #64748b; font-size: 11px; }
+
+  table { width: 100%; border-collapse: collapse; margin-bottom: 32px; font-size: 13px; }
+  th { text-align: left; padding: 10px 12px; background: #1e293b; color: #818cf8; border-bottom: 2px solid #334155; position: sticky; top: 0; }
+  td { padding: 8px 12px; border-bottom: 1px solid #1e293b; vertical-align: top; }
+  tr:hover td { background: #1e293b; }
+  .carries-cell { font-family: monospace; font-size: 11px; color: #64748b; }
+  .file-exists { color: #4ade80; }
+  .file-missing { color: #f87171; }
+
+  .legend {
+    display: flex; gap: 20px; flex-wrap: wrap; margin: 16px 0;
+    font-size: 13px; color: #94a3b8;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+
+  footer { text-align: center; color: #475569; font-size: 12px; margin-top: 48px; padding-top: 24px; border-top: 1px solid #334155; }
+</style>
+</head>
+<body>
+
+<h1>📋 app-builder-v2</h1>
+<p style="color:#64748b;">/Users/xiaopenglv/ai-agents/多角色配合系统/apps/app-builder-v2</p>
+
+<div class="summary">
+  <div class="summary-item"><div class="label">入口角色</div><div class="value">蓝图解析师</div></div>
+  <div class="summary-item"><div class="label">角色数</div><div class="value">9</div></div>
+  <div class="summary-item"><div class="label">边数</div><div class="value">12</div></div>
+  <div class="summary-item"><div class="label">知识文件</div><div class="value">7</div></div>
+  <div class="summary-item"><div class="label">终态角色</div><div class="value" style="font-size:14px;">终审裁决者</div></div>
+</div>
+
+<div class="legend">
+  <div class="legend-item">🔵 manual 确认</div>
+  <div class="legend-item">🟢 auto 确认</div>
+  <div class="legend-item">🚀 入口</div>
+  <div class="legend-item">🏁 终态</div>
+  <div class="legend-item">--> 正常边</div>
+  <div class="legend-item">-.-> 循环边</div>
+  <div class="legend-item">==-> 回退边</div>
+  <div class="legend-item">===> JOIN 边</div>
+</div>
+
+<h2>🗺️ 拓扑流程图</h2>
+<div class="mermaid-container">
+  <pre class="mermaid">graph TD
+    R5f8b56fd[&quot;🚀 🔵 蓝图解析师&quot;]
+    R4999013c[&quot;🟢 结构生成师&quot;]
+    R653d5116[&quot;🟢 Skill填充师&quot;]
+    R2c564576[&quot;🟢 Knowledge填充师&quot;]
+    R9c0fb871[&quot;🟢 编译预检师&quot;]
+    Rda1e364b[&quot;🟢 忠实度红队&quot;]
+    R2d1dcdf4[&quot;🟢 完整性红队&quot;]
+    R61ee7c5d[&quot;🟢 一致性红队&quot;]
+    R90fc0569[&quot;🟢 终审裁决者 🏁&quot;]
+
+    R5f8b56fd --&gt;|无条件| R4999013c
+    R4999013c --&gt;|无条件| R280eed1f
+    R653d5116 ==&gt;|🔗 无条件| R9c0fb871
+    R2c564576 ==&gt;|🔗 无条件| R9c0fb871
+    R9c0fb871 --&gt;|confirmed| R4de925af
+    R9c0fb871 ==-&gt;|⚠️ fail_compile| R653d5116
+    R9c0fb871 ==-&gt;|⚠️ fail_compile| R2c564576
+    Rda1e364b ==&gt;|🔗 无条件| R90fc0569
+    R2d1dcdf4 ==&gt;|🔗 无条件| R90fc0569
+    R61ee7c5d ==&gt;|🔗 无条件| R90fc0569
+    R90fc0569 -.-&gt;|confirmed| END{&quot;🏁 完成&quot;}
+    R90fc0569 -.-&gt;|consistency_defect| END{&quot;🏁 完成&quot;}
+    R90fc0569 ==-&gt;|⚠️ fail_consistency| R653d5116
+    R90fc0569 ==-&gt;|⚠️ fail_consistency| R2c564576
+    R90fc0569 ==-&gt;|⚠️ fail_structure| R4999013c
+
+    classDef manual fill:#dbeafe,stroke:#3b82f6,stroke-width:2px
+    classDef auto fill:#dcfce7,stroke:#22c55e,stroke-width:1px
+    classDef terminal fill:#fef3c7,stroke:#f59e0b,stroke-width:2px
+    classDef entry fill:#fce7f3,stroke:#ec4899,stroke-width:3px
+    class R5f8b56fd entry,manual
+    class R4999013c auto
+    class R653d5116 auto
+    class R2c564576 auto
+    class R9c0fb871 auto
+    class Rda1e364b auto
+    class R2d1dcdf4 auto
+    class R61ee7c5d auto
+    class R90fc0569 terminal,auto</pre>
+</div>
+
+<h2>🎴 角色详情</h2>
+<div class="role-grid">
+        <div class="role-card role-card-entry">
+          <div class="role-header">
+            <h3>蓝图解析师</h3>
+            <div class="role-badges"><span class="badge badge-entry">入口</span> <span class="badge badge-manual">manual</span></div>
+          </div>
+<div class="section"><h4>📥 输入文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">架构蓝图</span><span class="file-path">outputs/架构蓝图.md</span></div></div>
+<div class="section"><h4>📤 输出文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">内部蓝图模型</span><span class="file-path">process/outputs/内部蓝图模型.json</span></div></div>
+
+
+<div class="section"><h4>🔀 路由出边</h4><div class="edge-item"><span class="edge-verdict">(无条件)</span> → <span class="edge-target">结构生成师</span></div></div>
+<div class="section"><h4>📨 路由入边</h4><div class="edge-item"><span class="edge-source">蓝图解析师</span> → <span class="edge-verdict">(无条件)</span></div></div>
+        </div>        <div class="role-card">
+          <div class="role-header">
+            <h3>结构生成师</h3>
+            <div class="role-badges"><span class="badge badge-auto">auto</span></div>
+          </div>
+<div class="section"><h4>📥 输入文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">内部蓝图模型</span><span class="file-path">process/outputs/内部蓝图模型.json</span></div></div>
+<div class="section"><h4>📤 输出文件</h4><div class="file-item file-exists"><span class="file-icon">✓</span><span class="file-name">目标APP架构文件</span><span class="file-path">app.yaml</span></div><div class="file-item file-exists"><span class="file-icon">✓</span><span class="file-name">目标APP清单</span><span class="file-path">manifest.json</span></div><div class="file-item file-exists"><span class="file-icon">✓</span><span class="file-name">目标APP路由</span><span class="file-path">ROUTER.json</span></div><div class="file-item file-exists"><span class="file-icon">✓</span><span class="file-name">目标APP注册表</span><span class="file-path">registry.json</span></div></div>
+
+
+<div class="section"><h4>🔀 路由出边</h4><div class="edge-item"><span class="edge-verdict">(无条件)</span> → <span class="edge-target">[Skill填充师, Knowledge填充师]</span></div></div>
+<div class="section"><h4>📨 路由入边</h4><div class="edge-item"><span class="edge-source">结构生成师</span> → <span class="edge-verdict">(无条件)</span></div></div>
+        </div>        <div class="role-card">
+          <div class="role-header">
+            <h3>Skill填充师</h3>
+            <div class="role-badges"><span class="badge badge-auto">auto</span></div>
+          </div>
+<div class="section"><h4>📥 输入文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">内部蓝图模型</span><span class="file-path">process/outputs/内部蓝图模型.json</span></div><div class="file-item file-exists"><span class="file-icon">✓</span><span class="file-name">目标APP架构文件</span><span class="file-path">app.yaml</span></div><div class="file-item file-exists"><span class="file-icon">✓</span><span class="file-name">目标APP路由</span><span class="file-path">ROUTER.json</span></div></div>
+<div class="section"><h4>📤 输出文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">技能填充报告</span><span class="file-path">process/outputs/技能填充报告.json</span></div><div class="file-item file-exists"><span class="file-icon">✓</span><span class="file-name">角色文件树</span><span class="file-path">roles/</span></div></div>
+
+
+
+<div class="section"><h4>📨 路由入边</h4><div class="edge-item"><span class="edge-source">Skill填充师 + Knowledge填充师</span> → <span class="edge-verdict">(无条件)</span></div></div>
+        </div>        <div class="role-card">
+          <div class="role-header">
+            <h3>Knowledge填充师</h3>
+            <div class="role-badges"><span class="badge badge-auto">auto</span></div>
+          </div>
+<div class="section"><h4>📥 输入文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">内部蓝图模型</span><span class="file-path">process/outputs/内部蓝图模型.json</span></div><div class="file-item file-exists"><span class="file-icon">✓</span><span class="file-name">目标APP架构文件</span><span class="file-path">app.yaml</span></div></div>
+<div class="section"><h4>📤 输出文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">知识填充报告</span><span class="file-path">process/outputs/知识填充报告.json</span></div><div class="file-item file-exists"><span class="file-icon">✓</span><span class="file-name">知识文档</span><span class="file-path">knowledge/</span></div></div>
+
+
+
+<div class="section"><h4>📨 路由入边</h4><div class="edge-item"><span class="edge-source">Skill填充师 + Knowledge填充师</span> → <span class="edge-verdict">(无条件)</span></div></div>
+        </div>        <div class="role-card">
+          <div class="role-header">
+            <h3>编译预检师</h3>
+            <div class="role-badges"><span class="badge badge-auto">auto</span></div>
+          </div>
+<div class="section"><h4>📥 输入文件</h4><div class="file-item file-exists"><span class="file-icon">✓</span><span class="file-name">目标APP架构文件</span><span class="file-path">app.yaml</span></div><div class="file-item file-exists"><span class="file-icon">✓</span><span class="file-name">目标APP清单</span><span class="file-path">manifest.json</span></div><div class="file-item file-exists"><span class="file-icon">✓</span><span class="file-name">目标APP路由</span><span class="file-path">ROUTER.json</span></div><div class="file-item file-exists"><span class="file-icon">✓</span><span class="file-name">目标APP注册表</span><span class="file-path">registry.json</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">技能填充报告</span><span class="file-path">process/outputs/技能填充报告.json</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">知识填充报告</span><span class="file-path">process/outputs/知识填充报告.json</span></div></div>
+<div class="section"><h4>📤 输出文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">编译预检报告</span><span class="file-path">process/outputs/编译预检报告.json</span></div></div>
+
+<div class="section"><h4>⚖️ Verdict</h4><div class="verdict-list"><span class="verdict-tag">confirmed</span><span class="verdict-tag">fail_compile</span></div></div>
+<div class="section"><h4>🔀 路由出边</h4><div class="edge-item"><span class="edge-verdict">confirmed</span> → <span class="edge-target">[忠实度红队, 完整性红队, 一致性红队]</span></div><div class="edge-item"><span class="edge-verdict">fail_compile</span> → <span class="edge-target">Skill填充师</span></div><div class="edge-item"><span class="edge-verdict">fail_compile</span> → <span class="edge-target">Knowledge填充师</span></div></div>
+<div class="section"><h4>📨 路由入边</h4><div class="edge-item"><span class="edge-source">编译预检师</span> → <span class="edge-verdict">confirmed</span></div><div class="edge-item"><span class="edge-source">编译预检师</span> → <span class="edge-verdict">fail_compile</span></div><div class="edge-item"><span class="edge-source">编译预检师</span> → <span class="edge-verdict">fail_compile</span></div></div>
+        </div>        <div class="role-card">
+          <div class="role-header">
+            <h3>忠实度红队</h3>
+            <div class="role-badges"><span class="badge badge-auto">auto</span></div>
+          </div>
+<div class="section"><h4>📥 输入文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">内部蓝图模型</span><span class="file-path">process/outputs/内部蓝图模型.json</span></div><div class="file-item file-exists"><span class="file-icon">✓</span><span class="file-name">角色文件树</span><span class="file-path">roles/</span></div></div>
+<div class="section"><h4>📤 输出文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">忠实度问题清单</span><span class="file-path">process/outputs/R1-问题清单.json</span></div></div>
+
+
+
+<div class="section"><h4>📨 路由入边</h4><div class="edge-item"><span class="edge-source">忠实度红队 + 完整性红队 + 一致性红队</span> → <span class="edge-verdict">(无条件)</span></div></div>
+        </div>        <div class="role-card">
+          <div class="role-header">
+            <h3>完整性红队</h3>
+            <div class="role-badges"><span class="badge badge-auto">auto</span></div>
+          </div>
+<div class="section"><h4>📥 输入文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">内部蓝图模型</span><span class="file-path">process/outputs/内部蓝图模型.json</span></div><div class="file-item file-exists"><span class="file-icon">✓</span><span class="file-name">角色文件树</span><span class="file-path">roles/</span></div><div class="file-item file-exists"><span class="file-icon">✓</span><span class="file-name">知识文档</span><span class="file-path">knowledge/</span></div></div>
+<div class="section"><h4>📤 输出文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">完整性问题清单</span><span class="file-path">process/outputs/R2-问题清单.json</span></div></div>
+
+
+
+<div class="section"><h4>📨 路由入边</h4><div class="edge-item"><span class="edge-source">忠实度红队 + 完整性红队 + 一致性红队</span> → <span class="edge-verdict">(无条件)</span></div></div>
+        </div>        <div class="role-card">
+          <div class="role-header">
+            <h3>一致性红队</h3>
+            <div class="role-badges"><span class="badge badge-auto">auto</span></div>
+          </div>
+<div class="section"><h4>📥 输入文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">内部蓝图模型</span><span class="file-path">process/outputs/内部蓝图模型.json</span></div><div class="file-item file-exists"><span class="file-icon">✓</span><span class="file-name">角色文件树</span><span class="file-path">roles/</span></div><div class="file-item file-exists"><span class="file-icon">✓</span><span class="file-name">目标APP路由</span><span class="file-path">ROUTER.json</span></div></div>
+<div class="section"><h4>📤 输出文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">一致性问题清单</span><span class="file-path">process/outputs/R3-问题清单.json</span></div></div>
+
+
+
+<div class="section"><h4>📨 路由入边</h4><div class="edge-item"><span class="edge-source">忠实度红队 + 完整性红队 + 一致性红队</span> → <span class="edge-verdict">(无条件)</span></div></div>
+        </div>        <div class="role-card role-card-terminal">
+          <div class="role-header">
+            <h3>终审裁决者</h3>
+            <div class="role-badges"><span class="badge badge-terminal">终态</span> <span class="badge badge-auto">auto</span></div>
+          </div>
+<div class="section"><h4>📥 输入文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">编译预检报告</span><span class="file-path">process/outputs/编译预检报告.json</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">忠实度问题清单</span><span class="file-path">process/outputs/R1-问题清单.json</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">完整性问题清单</span><span class="file-path">process/outputs/R2-问题清单.json</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">一致性问题清单</span><span class="file-path">process/outputs/R3-问题清单.json</span></div></div>
+<div class="section"><h4>📤 输出文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">终审裁决书</span><span class="file-path">outputs/终审裁决书.json</span></div></div>
+
+<div class="section"><h4>⚖️ Verdict</h4><div class="verdict-list"><span class="verdict-tag">confirmed</span><span class="verdict-tag">consistency_defect</span><span class="verdict-tag">fail_consistency</span><span class="verdict-tag">fail_structure</span></div></div>
+<div class="section"><h4>🔀 路由出边</h4><div class="edge-item"><span class="edge-verdict">confirmed</span> → <span class="edge-target">完成</span></div><div class="edge-item"><span class="edge-verdict">consistency_defect</span> → <span class="edge-target">完成</span></div><div class="edge-item"><span class="edge-verdict">fail_consistency</span> → <span class="edge-target">Skill填充师</span></div><div class="edge-item"><span class="edge-verdict">fail_consistency</span> → <span class="edge-target">Knowledge填充师</span></div><div class="edge-item"><span class="edge-verdict">fail_structure</span> → <span class="edge-target">结构生成师</span></div></div>
+<div class="section"><h4>📨 路由入边</h4><div class="edge-item"><span class="edge-source">终审裁决者</span> → <span class="edge-verdict">confirmed</span></div><div class="edge-item"><span class="edge-source">终审裁决者</span> → <span class="edge-verdict">consistency_defect</span></div><div class="edge-item"><span class="edge-source">终审裁决者</span> → <span class="edge-verdict">fail_consistency</span></div><div class="edge-item"><span class="edge-source">终审裁决者</span> → <span class="edge-verdict">fail_consistency</span></div><div class="edge-item"><span class="edge-source">终审裁决者</span> → <span class="edge-verdict">fail_structure</span></div></div>
+        </div>
+</div>
+
+<h2>🔀 边详情表</h2>
+<table>
+  <thead><tr><th>Source</th><th>Target</th><th>Verdict</th><th>Carries</th><th>Max</th><th>Restrict</th></tr></thead>
+  <tbody>          <tr>
+            <td>蓝图解析师 </td>
+            <td>结构生成师</td>
+            <td><span class="verdict-tag">(无条件)</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>结构生成师 </td>
+            <td>[Skill填充师, Knowledge填充师]</td>
+            <td><span class="verdict-tag">(无条件)</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>Skill填充师 + Knowledge填充师 <span class="badge badge-join">JOIN</span></td>
+            <td>编译预检师</td>
+            <td><span class="verdict-tag">(无条件)</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>编译预检师 </td>
+            <td>[忠实度红队, 完整性红队, 一致性红队]</td>
+            <td><span class="verdict-tag">confirmed</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>编译预检师 </td>
+            <td>Skill填充师</td>
+            <td><span class="verdict-tag">fail_compile</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>编译预检师 </td>
+            <td>Knowledge填充师</td>
+            <td><span class="verdict-tag">fail_compile</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>忠实度红队 + 完整性红队 + 一致性红队 <span class="badge badge-join">JOIN</span></td>
+            <td>终审裁决者</td>
+            <td><span class="verdict-tag">(无条件)</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>终审裁决者 </td>
+            <td>完成</td>
+            <td><span class="verdict-tag">confirmed</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>终审裁决者 </td>
+            <td>完成</td>
+            <td><span class="verdict-tag">consistency_defect</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>终审裁决者 </td>
+            <td>Skill填充师</td>
+            <td><span class="verdict-tag">fail_consistency</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>终审裁决者 </td>
+            <td>Knowledge填充师</td>
+            <td><span class="verdict-tag">fail_consistency</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>终审裁决者 </td>
+            <td>结构生成师</td>
+            <td><span class="verdict-tag">fail_structure</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>
+  </tbody>
+</table>
+
+<h2>📦 文件流转分析</h2>
+<table>
+  <thead><tr><th>文件路径</th><th>生产者</th><th>消费者</th></tr></thead>
+  <tbody>          <tr>
+            <td class="file-exists">✓ ROUTER.json</td>
+            <td>结构生成师</td>
+            <td>Skill填充师, 编译预检师, 一致性红队</td>
+          </tr>          <tr>
+            <td class="file-exists">✓ app.yaml</td>
+            <td>结构生成师</td>
+            <td>Skill填充师, Knowledge填充师, 编译预检师</td>
+          </tr>          <tr>
+            <td class="file-exists">✓ knowledge/</td>
+            <td>Knowledge填充师</td>
+            <td>完整性红队</td>
+          </tr>          <tr>
+            <td class="file-exists">✓ manifest.json</td>
+            <td>结构生成师</td>
+            <td>编译预检师</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ outputs/架构蓝图.md</td>
+            <td>--</td>
+            <td>蓝图解析师</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ outputs/终审裁决书.json</td>
+            <td>终审裁决者</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ process/outputs/R1-问题清单.json</td>
+            <td>忠实度红队</td>
+            <td>终审裁决者</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ process/outputs/R2-问题清单.json</td>
+            <td>完整性红队</td>
+            <td>终审裁决者</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ process/outputs/R3-问题清单.json</td>
+            <td>一致性红队</td>
+            <td>终审裁决者</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ process/outputs/内部蓝图模型.json</td>
+            <td>蓝图解析师</td>
+            <td>结构生成师, Skill填充师, Knowledge填充师, 忠实度红队, 完整性红队, 一致性红队</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ process/outputs/技能填充报告.json</td>
+            <td>Skill填充师</td>
+            <td>编译预检师</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ process/outputs/知识填充报告.json</td>
+            <td>Knowledge填充师</td>
+            <td>编译预检师</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ process/outputs/编译预检报告.json</td>
+            <td>编译预检师</td>
+            <td>终审裁决者</td>
+          </tr>          <tr>
+            <td class="file-exists">✓ registry.json</td>
+            <td>结构生成师</td>
+            <td>编译预检师</td>
+          </tr>          <tr>
+            <td class="file-exists">✓ roles/</td>
+            <td>Skill填充师</td>
+            <td>忠实度红队, 完整性红队, 一致性红队</td>
+          </tr>
+  </tbody>
+</table>
+
+<h2>📚 知识注入矩阵</h2>
+<table>
+  <thead><tr><th>知识名称</th><th>路径</th><th>注入到</th></tr></thead>
+  <tbody>          <tr>
+            <td class="file-exists">✓ 高质量APP产出原则</td>
+            <td>knowledge/高质量APP产出原则.md</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td class="file-exists">✓ 蓝图解析规范</td>
+            <td>knowledge/蓝图解析规范.md</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td class="file-exists">✓ APP包结构规范</td>
+            <td>knowledge/APP包结构规范.md</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td class="file-exists">✓ skill编写指南</td>
+            <td>knowledge/skill编写指南.md</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td class="file-exists">✓ knowledge编写指南</td>
+            <td>knowledge/knowledge编写指南.md</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td class="file-exists">✓ 对抗校验准则</td>
+            <td>knowledge/对抗校验准则.md</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td class="file-exists">✓ SDK规范</td>
+            <td>knowledge/SDK_SPEC.md</td>
+            <td>--</td>
+          </tr>
+  </tbody>
+</table>
+
+<footer>
+  Generated by app_inspector.py · app-builder-v2
+</footer>
+
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'dark', flowchart: { curve: 'basis', padding: 20 } });
+</script>
+</body>
+</html>

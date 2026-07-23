@@ -152,11 +152,6 @@ def main():
             rel_schema = os.path.join(app_path, schema_path)
             if not os.path.exists(rel_schema) and not os.path.exists(schema_path):
                 output_failure("OIC-E532", f"角色 {role['role_name']} 的 schema 不存在: {schema_path}")
-        principles_path = role.get("principles", "")
-        if principles_path:
-            rel_princ = os.path.join(app_path, principles_path)
-            if not os.path.exists(rel_princ) and not os.path.exists(principles_path):
-                output_failure("OIC-E533", f"角色 {role['role_name']} 的 principles 不存在: {principles_path}")
 
     # Step 6: 创建 workspace 运行目录
     os.makedirs(ws_base, exist_ok=True)
@@ -213,7 +208,9 @@ def main():
             inp_path = inp.get("abs_path") or inp.get("path", "")
             if not inp_path:
                 continue
-            full_path = resolve_workspace_output(ws_id, inp_path, app_path, is_absolute=is_abs)
+            # knowledge 类型路由到 app 包（内置资产，不跟随工作区）
+            inp_type = inp.get("type")
+            full_path = resolve_workspace_output(ws_id, inp_path, app_path, is_absolute=is_abs, output_type=inp_type)
             if not os.path.exists(full_path):
                 os.makedirs(os.path.dirname(full_path), exist_ok=True)
                 _, ext = os.path.splitext(full_path)

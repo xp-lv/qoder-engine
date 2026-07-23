@@ -6,8 +6,7 @@
     "outputs": [
       {
         "name": "需求文档",
-        "path": "00-需求描述.md",
-        "type": "deliverable"
+        "path": "00-需求描述.md"
       }
     ],
     "gate_rules": {
@@ -46,8 +45,7 @@
     "outputs": [
       {
         "name": "需求校验报告",
-        "path": "outputs/需求接收者-validation.json",
-        "type": "deliverable"
+        "path": "outputs/需求接收者-validation.json"
       }
     ],
     "gate_rules": {
@@ -64,8 +62,7 @@
     "inputs": [
       {
         "name": "需求文档",
-        "path": "00-需求描述.md",
-        "type": "deliverable"
+        "path": "00-需求描述.md"
       }
     ],
     "input_groups": [
@@ -88,8 +85,7 @@
     "outputs": [
       {
         "name": "对抗分析报告",
-        "path": "outputs/需求红队-对抗分析报告.json",
-        "type": "deliverable"
+        "path": "outputs/需求红队-对抗分析报告.json"
       }
     ],
     "gate_rules": {
@@ -106,8 +102,7 @@
     "inputs": [
       {
         "name": "需求文档",
-        "path": "00-需求描述.md",
-        "type": "deliverable"
+        "path": "00-需求描述.md"
       },
       {
         "name": "SDK规范",
@@ -135,8 +130,7 @@
     "outputs": [
       {
         "name": "App架构文件",
-        "path": "app.yaml",
-        "type": "deliverable"
+        "path": "app.yaml"
       }
     ],
     "gate_rules": {
@@ -153,38 +147,31 @@
     "inputs": [
       {
         "name": "需求文档",
-        "path": "00-需求描述.md",
-        "type": "deliverable"
+        "path": "00-需求描述.md"
       },
       {
         "name": "审阅报告",
-        "path": "outputs/审阅报告.json",
-        "type": "deliverable"
+        "path": "outputs/审阅报告.json"
       },
       {
         "name": "裁决审计报告",
-        "path": "outputs/裁决审计报告.json",
-        "type": "deliverable"
+        "path": "outputs/裁决审计报告.json"
       },
       {
         "name": "压力测试报告",
-        "path": "outputs/架构红队-压力测试报告.json",
-        "type": "deliverable"
+        "path": "outputs/架构红队-压力测试报告.json"
       },
       {
         "name": "版本Diff报告",
-        "path": "outputs/版本管理者-diff报告.json",
-        "type": "deliverable"
+        "path": "outputs/版本管理者-diff报告.json"
       },
       {
         "name": "模拟验证报告",
-        "path": "outputs/模拟验证报告.json",
-        "type": "deliverable"
+        "path": "outputs/模拟验证报告.json"
       },
       {
         "name": "振荡诊断报告",
-        "path": "outputs/振荡诊断报告.json",
-        "type": "deliverable"
+        "path": "outputs/振荡诊断报告.json"
       }
     ],
     "input_groups": [
@@ -215,8 +202,7 @@
     "outputs": [
       {
         "name": "模拟验证报告",
-        "path": "outputs/模拟验证报告.json",
-        "type": "deliverable"
+        "path": "outputs/模拟验证报告.json"
       }
     ],
     "gate_rules": {
@@ -233,13 +219,11 @@
     "inputs": [
       {
         "name": "App架构文件",
-        "path": "app.yaml",
-        "type": "deliverable"
+        "path": "app.yaml"
       },
       {
         "name": "需求文档",
-        "path": "00-需求描述.md",
-        "type": "deliverable"
+        "path": "00-需求描述.md"
       },
       {
         "name": "SDK规范",
@@ -267,18 +251,15 @@
     "outputs": [
       {
         "name": "版本快照",
-        "path": "outputs/versions/app-v{iteration}.yaml",
-        "type": "deliverable"
+        "path": "outputs/versions/app-v{iteration}.yaml"
       },
       {
         "name": "版本Diff报告",
-        "path": "outputs/版本管理者-diff报告.json",
-        "type": "deliverable"
+        "path": "outputs/版本管理者-diff报告.json"
       },
       {
         "name": "振荡诊断报告",
-        "path": "outputs/振荡诊断报告.json",
-        "type": "deliverable"
+        "path": "outputs/振荡诊断报告.json"
       }
     ],
     "gate_rules": {
@@ -295,8 +276,7 @@
     "inputs": [
       {
         "name": "App架构文件",
-        "path": "app.yaml",
-        "type": "deliverable"
+        "path": "app.yaml"
       }
     ],
     "input_groups": [
@@ -320,8 +300,7 @@
     "outputs": [
       {
         "name": "压力测试报告",
-        "path": "outputs/架构红队-压力测试报告.json",
-        "type": "deliverable"
+        "path": "outputs/架构红队-压力测试报告.json"
       }
     ],
     "gate_rules": {
@@ -338,13 +317,11 @@
     "inputs": [
       {
         "name": "App架构文件",
-        "path": "app.yaml",
-        "type": "deliverable"
+        "path": "app.yaml"
       },
       {
         "name": "需求文档",
-        "path": "00-需求描述.md",
-        "type": "deliverable"
+        "path": "00-需求描述.md"
       },
       {
         "name": "SDK规范",
@@ -373,8 +350,7 @@
     "outputs": [
       {
         "name": "结构演化审阅报告",
-        "path": "outputs/结构演化审阅报告.json",
-        "type": "deliverable"
+        "path": "outputs/结构演化审阅报告.json"
       }
     ],
     "gate_rules": {
@@ -391,18 +367,15 @@
     "inputs": [
       {
         "name": "需求文档",
-        "path": "00-需求描述.md",
-        "type": "deliverable"
+        "path": "00-需求描述.md"
       },
       {
         "name": "App架构文件",
-        "path": "app.yaml",
-        "type": "deliverable"
+        "path": "app.yaml"
       },
       {
         "name": "版本Diff报告",
-        "path": "outputs/版本管理者-diff报告.json",
-        "type": "deliverable"
+        "path": "outputs/版本管理者-diff报告.json"
       },
       {
         "name": "SDK规范",
@@ -432,8 +405,7 @@
     "outputs": [
       {
         "name": "对抗闭环审阅报告",
-        "path": "outputs/对抗闭环审阅报告.json",
-        "type": "deliverable"
+        "path": "outputs/对抗闭环审阅报告.json"
       }
     ],
     "gate_rules": {
@@ -450,13 +422,11 @@
     "inputs": [
       {
         "name": "App架构文件",
-        "path": "app.yaml",
-        "type": "deliverable"
+        "path": "app.yaml"
       },
       {
         "name": "压力测试报告",
-        "path": "outputs/架构红队-压力测试报告.json",
-        "type": "deliverable"
+        "path": "outputs/架构红队-压力测试报告.json"
       },
       {
         "name": "SDK规范",
@@ -486,8 +456,7 @@
     "outputs": [
       {
         "name": "生长空间审阅报告",
-        "path": "outputs/生长空间审阅报告.json",
-        "type": "deliverable"
+        "path": "outputs/生长空间审阅报告.json"
       }
     ],
     "gate_rules": {
@@ -504,13 +473,11 @@
     "inputs": [
       {
         "name": "App架构文件",
-        "path": "app.yaml",
-        "type": "deliverable"
+        "path": "app.yaml"
       },
       {
         "name": "知识演进追踪表",
-        "path": "outputs/知识演进追踪表.json",
-        "type": "deliverable"
+        "path": "outputs/知识演进追踪表.json"
       },
       {
         "name": "SDK规范",
@@ -540,8 +507,7 @@
     "outputs": [
       {
         "name": "审阅报告",
-        "path": "outputs/审阅报告.json",
-        "type": "deliverable"
+        "path": "outputs/审阅报告.json"
       }
     ],
     "gate_rules": {
@@ -558,38 +524,31 @@
     "inputs": [
       {
         "name": "结构演化审阅报告",
-        "path": "outputs/结构演化审阅报告.json",
-        "type": "deliverable"
+        "path": "outputs/结构演化审阅报告.json"
       },
       {
         "name": "对抗闭环审阅报告",
-        "path": "outputs/对抗闭环审阅报告.json",
-        "type": "deliverable"
+        "path": "outputs/对抗闭环审阅报告.json"
       },
       {
         "name": "生长空间审阅报告",
-        "path": "outputs/生长空间审阅报告.json",
-        "type": "deliverable"
+        "path": "outputs/生长空间审阅报告.json"
       },
       {
         "name": "需求文档",
-        "path": "00-需求描述.md",
-        "type": "deliverable"
+        "path": "00-需求描述.md"
       },
       {
         "name": "App架构文件",
-        "path": "app.yaml",
-        "type": "deliverable"
+        "path": "app.yaml"
       },
       {
         "name": "模拟验证报告",
-        "path": "outputs/模拟验证报告.json",
-        "type": "deliverable"
+        "path": "outputs/模拟验证报告.json"
       },
       {
         "name": "裁决审计报告",
-        "path": "outputs/裁决审计报告.json",
-        "type": "deliverable"
+        "path": "outputs/裁决审计报告.json"
       }
     ],
     "input_groups": [
@@ -623,8 +582,7 @@
     "outputs": [
       {
         "name": "裁决审计报告",
-        "path": "outputs/裁决审计报告.json",
-        "type": "deliverable"
+        "path": "outputs/裁决审计报告.json"
       }
     ],
     "gate_rules": {
@@ -641,33 +599,27 @@
     "inputs": [
       {
         "name": "审阅报告",
-        "path": "outputs/审阅报告.json",
-        "type": "deliverable"
+        "path": "outputs/审阅报告.json"
       },
       {
         "name": "需求文档",
-        "path": "00-需求描述.md",
-        "type": "deliverable"
+        "path": "00-需求描述.md"
       },
       {
         "name": "App架构文件",
-        "path": "app.yaml",
-        "type": "deliverable"
+        "path": "app.yaml"
       },
       {
         "name": "版本Diff报告",
-        "path": "outputs/版本管理者-diff报告.json",
-        "type": "deliverable"
+        "path": "outputs/版本管理者-diff报告.json"
       },
       {
         "name": "对抗分析报告",
-        "path": "outputs/需求红队-对抗分析报告.json",
-        "type": "deliverable"
+        "path": "outputs/需求红队-对抗分析报告.json"
       },
       {
         "name": "压力测试报告",
-        "path": "outputs/架构红队-压力测试报告.json",
-        "type": "deliverable"
+        "path": "outputs/架构红队-压力测试报告.json"
       },
       {
         "name": "SDK规范",
@@ -709,8 +661,7 @@
     "outputs": [
       {
         "name": "知识演进追踪表",
-        "path": "outputs/知识演进追踪表.json",
-        "type": "deliverable"
+        "path": "outputs/知识演进追踪表.json"
       }
     ],
     "gate_rules": {
@@ -727,13 +678,11 @@
     "inputs": [
       {
         "name": "App架构文件",
-        "path": "app.yaml",
-        "type": "deliverable"
+        "path": "app.yaml"
       },
       {
         "name": "知识演进追踪表",
-        "path": "outputs/知识演进追踪表.json",
-        "type": "deliverable"
+        "path": "outputs/知识演进追踪表.json"
       },
       {
         "name": "SDK规范",

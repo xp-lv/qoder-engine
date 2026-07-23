@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>APP Inspector &#8212; lxp-eng-planning</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+    background: #0f172a; color: #e2e8f0; padding: 24px; line-height: 1.6;
+  }
+  h1 { color: #38bdf8; margin-bottom: 8px; font-size: 28px; }
+  h2 { color: #818cf8; margin: 32px 0 16px; font-size: 22px; border-bottom: 2px solid #334155; padding-bottom: 8px; }
+  h3 { color: #f1f5f9; margin-bottom: 8px; font-size: 18px; }
+  h4 { color: #94a3b8; margin-bottom: 8px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .summary { display: flex; gap: 16px; flex-wrap: wrap; margin: 16px 0 32px; }
+  .summary-item {
+    background: #1e293b; border: 1px solid #334155; border-radius: 8px;
+    padding: 12px 20px; min-width: 120px;
+  }
+  .summary-item .label { color: #64748b; font-size: 12px; text-transform: uppercase; }
+  .summary-item .value { color: #38bdf8; font-size: 20px; font-weight: bold; }
+
+  .mermaid-container {
+    background: #1e293b; border: 1px solid #334155; border-radius: 12px;
+    padding: 24px; overflow-x: auto; margin-bottom: 32px;
+  }
+
+  .role-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 16px; }
+  .role-card {
+    background: #1e293b; border: 1px solid #334155; border-radius: 12px;
+    padding: 20px; transition: border-color 0.2s;
+  }
+  .role-card:hover { border-color: #475569; }
+  .role-card-entry { border-left: 4px solid #ec4899; }
+  .role-card-terminal { border-left: 4px solid #f59e0b; }
+  .role-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
+  .role-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  .badge {
+    font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 500;
+  }
+  .badge-manual { background: #1e3a5f; color: #60a5fa; }
+  .badge-auto { background: #1a3622; color: #4ade80; }
+  .badge-entry { background: #3b1a4a; color: #e879f9; }
+  .badge-terminal { background: #3b2a0e; color: #fbbf24; }
+  .badge-join { background: #0c4a6e; color: #38bdf8; }
+
+  .section { margin-bottom: 16px; }
+  .file-item {
+    display: flex; align-items: center; gap: 8px; padding: 4px 0;
+    font-size: 13px;
+  }
+  .file-icon { width: 16px; text-align: center; font-weight: bold; }
+  .file-exists .file-icon { color: #4ade80; }
+  .file-missing { color: #64748b; }
+  .file-missing .file-icon { color: #f87171; }
+  .file-name { color: #cbd5e1; min-width: 100px; }
+  .file-path { color: #64748b; font-family: monospace; font-size: 12px; }
+
+  .verdict-list { display: flex; flex-wrap: wrap; gap: 6px; }
+  .verdict-tag {
+    background: #312e81; color: #a5b4fc; padding: 2px 10px;
+    border-radius: 12px; font-size: 12px; font-family: monospace;
+    white-space: nowrap;
+  }
+
+  .edge-item { font-size: 13px; padding: 3px 0; color: #94a3b8; }
+  .edge-verdict { color: #a5b4fc; font-family: monospace; }
+  .edge-target { color: #4ade80; }
+  .edge-source { color: #fbbf24; }
+  .edge-extra { color: #64748b; font-size: 11px; }
+
+  table { width: 100%; border-collapse: collapse; margin-bottom: 32px; font-size: 13px; }
+  th { text-align: left; padding: 10px 12px; background: #1e293b; color: #818cf8; border-bottom: 2px solid #334155; position: sticky; top: 0; }
+  td { padding: 8px 12px; border-bottom: 1px solid #1e293b; vertical-align: top; }
+  tr:hover td { background: #1e293b; }
+  .carries-cell { font-family: monospace; font-size: 11px; color: #64748b; }
+  .file-exists { color: #4ade80; }
+  .file-missing { color: #f87171; }
+
+  .legend {
+    display: flex; gap: 20px; flex-wrap: wrap; margin: 16px 0;
+    font-size: 13px; color: #94a3b8;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+
+  footer { text-align: center; color: #475569; font-size: 12px; margin-top: 48px; padding-top: 24px; border-top: 1px solid #334155; }
+</style>
+</head>
+<body>
+
+<h1>📋 lxp-eng-planning</h1>
+<p style="color:#64748b;">/Users/xiaopenglv/ai-agents/多角色配合系统/apps/lxp-eng-planning</p>
+
+<div class="summary">
+  <div class="summary-item"><div class="label">入口角色</div><div class="value">迭代守门人</div></div>
+  <div class="summary-item"><div class="label">角色数</div><div class="value">21</div></div>
+  <div class="summary-item"><div class="label">边数</div><div class="value">38</div></div>
+  <div class="summary-item"><div class="label">知识文件</div><div class="value">6</div></div>
+  <div class="summary-item"><div class="label">终态角色</div><div class="value" style="font-size:14px;">迭代守门人</div></div>
+</div>
+
+<div class="legend">
+  <div class="legend-item">🔵 manual 确认</div>
+  <div class="legend-item">🟢 auto 确认</div>
+  <div class="legend-item">🚀 入口</div>
+  <div class="legend-item">🏁 终态</div>
+  <div class="legend-item">--> 正常边</div>
+  <div class="legend-item">-.-> 循环边</div>
+  <div class="legend-item">==-> 回退边</div>
+  <div class="legend-item">===> JOIN 边</div>
+</div>
+
+<h2>🗺️ 拓扑流程图</h2>
+<div class="mermaid-container">
+  <pre class="mermaid">graph TD
+    Re1a23a9c[&quot;🚀 🔵 迭代守门人 🏁&quot;]
+    Rc9884a9f[&quot;🔵 需求接收者&quot;]
+    R900a3826[&quot;🟢 需求审计者&quot;]
+    R82b72b6b[&quot;🟢 需求分流者&quot;]
+    R26f01d7d[&quot;🟢 前端文档管理者&quot;]
+    R81f4f694[&quot;🟢 后端文档管理者&quot;]
+    R340db3e9[&quot;🟢 交叉审核者&quot;]
+    Rfbbc755f[&quot;🟢 交互逻辑设计师&quot;]
+    R865bf339[&quot;🟢 美学布局设计师&quot;]
+    R71b69fd9[&quot;🟢 接口翻译师&quot;]
+    Rf3e50a18[&quot;🟢 后端架构设计师&quot;]
+    Ra4da674e[&quot;🟢 数据模型设计师&quot;]
+    Rdf3a7d4d[&quot;🟢 API契约设计师&quot;]
+    R306fed97[&quot;🟢 前端实现者&quot;]
+    R01d37357[&quot;🟢 后端实现者&quot;]
+    R6080626c[&quot;🔵 预览部署者&quot;]
+    R66054d7a[&quot;🟢 后端启动验证者&quot;]
+    R0f413532[&quot;🔵 全栈联调验证者&quot;]
+    R2441ad05[&quot;🟢 合并校验者&quot;]
+    R201fa01b[&quot;🟢 部署文档管理者&quot;]
+    Rf10a17f2[&quot;🔵 综合裁决者&quot;]
+
+    Re1a23a9c --&gt;|fresh_start| Rc9884a9f
+    Re1a23a9c --&gt;|incremental| R0f413532
+    Re1a23a9c -.-&gt;|done| END{&quot;🏁 完成&quot;}
+    Rc9884a9f --&gt;|无条件| R40efb897
+    R306fed97 --&gt;|无条件| R4d46f226
+    R01d37357 --&gt;|无条件| R3c98e7f1
+    R40efb897 --&gt;|无条件| R900a3826
+    R900a3826 --&gt;|confirmed| R82b72b6b
+    R82b72b6b --&gt;|无条件| R26f01d7d
+    R82b72b6b --&gt;|无条件| R81f4f694
+    R26f01d7d ==&gt;|🔗 无条件| R340db3e9
+    R81f4f694 ==&gt;|🔗 无条件| R340db3e9
+    R340db3e9 --&gt;|confirmed| Rfbbc755f
+    R340db3e9 --&gt;|confirmed| R865bf339
+    R340db3e9 --&gt;|confirmed| R71b69fd9
+    R340db3e9 --&gt;|confirmed| Rf3e50a18
+    R340db3e9 --&gt;|confirmed| Ra4da674e
+    R71b69fd9 --&gt;|无条件| Rdf3a7d4d
+    Rfbbc755f ==&gt;|🔗 无条件| R306fed97
+    R865bf339 ==&gt;|🔗 无条件| R306fed97
+    R71b69fd9 ==&gt;|🔗 无条件| R306fed97
+    Rf3e50a18 ==&gt;|🔗 无条件| R01d37357
+    Ra4da674e ==&gt;|🔗 无条件| R01d37357
+    Rdf3a7d4d ==&gt;|🔗 无条件| R01d37357
+    R4d46f226 --&gt;|无条件| R6080626c
+    R3c98e7f1 --&gt;|confirmed| R66054d7a
+    R6080626c --&gt;|confirmed| R0f413532
+    R66054d7a --&gt;|confirmed| R0f413532
+    R0f413532 --&gt;|confirmed| R2441ad05
+    R2441ad05 --&gt;|confirmed| R201fa01b
+    R201fa01b --&gt;|无条件| Rf10a17f2
+    Rf10a17f2 --&gt;|confirmed| Re1a23a9c
+    R40efb897 -.-&gt;|🔄 loop| Rc9884a9f
+    R4d46f226 -.-&gt;|🔄 loop| R306fed97
+    R3c98e7f1 -.-&gt;|🔄 loop| R01d37357
+    R900a3826 --&gt;|challenged| Rc9884a9f
+    R340db3e9 --&gt;|FRONTEND_DOC_DEFECT| R26f01d7d
+    R340db3e9 --&gt;|BACKEND_DOC_DEFECT| R81f4f694
+    R340db3e9 --&gt;|BOTH_DOC_DEFECT| R26f01d7d
+    R340db3e9 --&gt;|BOTH_DOC_DEFECT| R81f4f694
+    R66054d7a --&gt;|BACKEND_BLOCKING| R01d37357
+    R0f413532 --&gt;|FRONTEND_BLOCKING| R306fed97
+    R0f413532 --&gt;|BACKEND_BLOCKING| R01d37357
+    R0f413532 --&gt;|design_fix| Rfbbc755f
+    R0f413532 --&gt;|design_fix| R865bf339
+    R2441ad05 --&gt;|FRONTEND_BLOCKING| R306fed97
+    R2441ad05 --&gt;|BACKEND_BLOCKING| R01d37357
+    Rf10a17f2 --&gt;|challenged| R82b72b6b
+    Rf10a17f2 --&gt;|doc_challenged| R26f01d7d
+    Rf10a17f2 --&gt;|doc_challenged| R81f4f694
+    Rf10a17f2 ==-&gt;|⚠️ deploy_doc_defect| R201fa01b
+
+    classDef manual fill:#dbeafe,stroke:#3b82f6,stroke-width:2px
+    classDef auto fill:#dcfce7,stroke:#22c55e,stroke-width:1px
+    classDef terminal fill:#fef3c7,stroke:#f59e0b,stroke-width:2px
+    classDef entry fill:#fce7f3,stroke:#ec4899,stroke-width:3px
+    class Re1a23a9c entry,terminal,manual
+    class Rc9884a9f manual
+    class R900a3826 auto
+    class R82b72b6b auto
+    class R26f01d7d auto
+    class R81f4f694 auto
+    class R340db3e9 auto
+    class Rfbbc755f auto
+    class R865bf339 auto
+    class R71b69fd9 auto
+    class Rf3e50a18 auto
+    class Ra4da674e auto
+    class Rdf3a7d4d auto
+    class R306fed97 auto
+    class R01d37357 auto
+    class R6080626c manual
+    class R66054d7a auto
+    class R0f413532 manual
+    class R2441ad05 auto
+    class R201fa01b auto
+    class Rf10a17f2 manual</pre>
+</div>
+
+<h2>🎴 角色详情</h2>
+<div class="role-grid">
+        <div class="role-card role-card-entry role-card-terminal">
+          <div class="role-header">
+            <h3>迭代守门人</h3>
+            <div class="role-badges"><span class="badge badge-entry">入口</span> <span class="badge badge-terminal">终态</span> <span class="badge badge-manual">manual</span></div>
+          </div>
+
+
+
+<div class="section"><h4>⚖️ Verdict</h4><div class="verdict-list"><span class="verdict-tag">done</span><span class="verdict-tag">fresh_start</span><span class="verdict-tag">incremental</span></div></div>
+<div class="section"><h4>🔀 路由出边</h4><div class="edge-item"><span class="edge-verdict">fresh_start</span> → <span class="edge-target">需求接收者</span></div><div class="edge-item"><span class="edge-verdict">incremental</span> → <span class="edge-target">全栈联调验证者</span></div><div class="edge-item"><span class="edge-verdict">done</span> → <span class="edge-target">完成</span></div></div>
+<div class="section"><h4>📨 路由入边</h4><div class="edge-item"><span class="edge-source">迭代守门人</span> → <span class="edge-verdict">fresh_start</span></div><div class="edge-item"><span class="edge-source">迭代守门人</span> → <span class="edge-verdict">incremental</span></div><div class="edge-item"><span class="edge-source">迭代守门人</span> → <span class="edge-verdict">done</span></div></div>
+        </div>        <div class="role-card">
+          <div class="role-header">
+            <h3>需求接收者</h3>
+            <div class="role-badges"><span class="badge badge-manual">manual</span></div>
+          </div>
+
+<div class="section"><h4>📤 输出文件</h4><div class="file-item file-exists"><span class="file-icon">✓</span><span class="file-name">需求文档</span><span class="file-path">00-需求描述.md</span></div></div>
+
+
+<div class="section"><h4>🔀 路由出边</h4><div class="edge-item"><span class="edge-verdict">(无条件)</span> → <span class="edge-target">需求接收者（校验）</span></div></div>
+<div class="section"><h4>📨 路由入边</h4><div class="edge-item"><span class="edge-source">需求接收者</span> → <span class="edge-verdict">(无条件)</span></div></div>
+        </div>        <div class="role-card">
+          <div class="role-header">
+            <h3>需求审计者</h3>
+            <div class="role-badges"><span class="badge badge-auto">auto</span></div>
+          </div>
+<div class="section"><h4>📥 输入文件</h4><div class="file-item file-exists"><span class="file-icon">✓</span><span class="file-name">需求文档</span><span class="file-path">00-需求描述.md</span></div></div>
+<div class="section"><h4>📤 输出文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">需求审计报告</span><span class="file-path">outputs/需求审计报告.json, type=process</span></div></div>
+
+<div class="section"><h4>⚖️ Verdict</h4><div class="verdict-list"><span class="verdict-tag">challenged</span><span class="verdict-tag">confirmed</span></div></div>
+<div class="section"><h4>🔀 路由出边</h4><div class="edge-item"><span class="edge-verdict">confirmed</span> → <span class="edge-target">需求分流者</span></div><div class="edge-item"><span class="edge-verdict">challenged</span> → <span class="edge-target">需求接收者</span></div></div>
+<div class="section"><h4>📨 路由入边</h4><div class="edge-item"><span class="edge-source">需求审计者</span> → <span class="edge-verdict">confirmed</span></div><div class="edge-item"><span class="edge-source">需求审计者</span> → <span class="edge-verdict">challenged</span></div></div>
+        </div>        <div class="role-card">
+          <div class="role-header">
+            <h3>需求分流者</h3>
+            <div class="role-badges"><span class="badge badge-auto">auto</span></div>
+          </div>
+<div class="section"><h4>📥 输入文件</h4><div class="file-item file-exists"><span class="file-icon">✓</span><span class="file-name">需求文档</span><span class="file-path">00-需求描述.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">需求审计报告</span><span class="file-path">outputs/需求审计报告.json, type=process</span></div></div>
+<div class="section"><h4>📤 输出文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">前端需求摘要</span><span class="file-path">outputs/前端需求摘要.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">后端需求摘要</span><span class="file-path">outputs/后端需求摘要.md</span></div></div>
+
+
+<div class="section"><h4>🔀 路由出边</h4><div class="edge-item"><span class="edge-verdict">(无条件)</span> → <span class="edge-target">[前端文档管理者, 后端文档管理者]</span></div></div>
+<div class="section"><h4>📨 路由入边</h4><div class="edge-item"><span class="edge-source">需求分流者</span> → <span class="edge-verdict">(无条件)</span></div></div>
+        </div>        <div class="role-card">
+          <div class="role-header">
+            <h3>前端文档管理者</h3>
+            <div class="role-badges"><span class="badge badge-auto">auto</span></div>
+          </div>
+<div class="section"><h4>📥 输入文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">前端需求摘要</span><span class="file-path">outputs/前端需求摘要.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">交叉审核报告</span><span class="file-path">outputs/交叉审核报告.json, type=process</span></div></div>
+<div class="section"><h4>📤 输出文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">前端需求规格文档</span><span class="file-path">outputs/前端需求规格文档.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">前端交互规范</span><span class="file-path">outputs/前端交互规范.md</span></div></div>
+
+
+
+<div class="section"><h4>📨 路由入边</h4><div class="edge-item"><span class="edge-source">前端文档管理者 + 后端文档管理者</span> → <span class="edge-verdict">(无条件)</span></div></div>
+        </div>        <div class="role-card">
+          <div class="role-header">
+            <h3>后端文档管理者</h3>
+            <div class="role-badges"><span class="badge badge-auto">auto</span></div>
+          </div>
+<div class="section"><h4>📥 输入文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">后端需求摘要</span><span class="file-path">outputs/后端需求摘要.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">交叉审核报告</span><span class="file-path">outputs/交叉审核报告.json, type=process</span></div></div>
+<div class="section"><h4>📤 输出文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">后端需求规格文档</span><span class="file-path">outputs/后端需求规格文档.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">后端业务逻辑文档</span><span class="file-path">outputs/后端业务逻辑文档.md</span></div></div>
+
+
+
+<div class="section"><h4>📨 路由入边</h4><div class="edge-item"><span class="edge-source">前端文档管理者 + 后端文档管理者</span> → <span class="edge-verdict">(无条件)</span></div></div>
+        </div>        <div class="role-card">
+          <div class="role-header">
+            <h3>交叉审核者</h3>
+            <div class="role-badges"><span class="badge badge-auto">auto</span></div>
+          </div>
+<div class="section"><h4>📥 输入文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">前端需求规格文档</span><span class="file-path">outputs/前端需求规格文档.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">前端交互规范</span><span class="file-path">outputs/前端交互规范.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">后端需求规格文档</span><span class="file-path">outputs/后端需求规格文档.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">后端业务逻辑文档</span><span class="file-path">outputs/后端业务逻辑文档.md</span></div></div>
+<div class="section"><h4>📤 输出文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">交叉审核报告</span><span class="file-path">outputs/交叉审核报告.json, type=process</span></div></div>
+
+<div class="section"><h4>⚖️ Verdict</h4><div class="verdict-list"><span class="verdict-tag">BACKEND_DOC_DEFECT</span><span class="verdict-tag">BOTH_DOC_DEFECT</span><span class="verdict-tag">FRONTEND_DOC_DEFECT</span><span class="verdict-tag">confirmed</span></div></div>
+<div class="section"><h4>🔀 路由出边</h4><div class="edge-item"><span class="edge-verdict">confirmed</span> → <span class="edge-target">[交互逻辑设计师, 美学布局设计师, 接口翻译师, 后端架构设计师, 数据模型设计师]</span></div><div class="edge-item"><span class="edge-verdict">FRONTEND_DOC_DEFECT</span> → <span class="edge-target">前端文档管理者</span></div><div class="edge-item"><span class="edge-verdict">BACKEND_DOC_DEFECT</span> → <span class="edge-target">后端文档管理者</span></div><div class="edge-item"><span class="edge-verdict">BOTH_DOC_DEFECT</span> → <span class="edge-target">[前端文档管理者, 后端文档管理者]</span></div></div>
+<div class="section"><h4>📨 路由入边</h4><div class="edge-item"><span class="edge-source">交叉审核者</span> → <span class="edge-verdict">confirmed</span></div><div class="edge-item"><span class="edge-source">交叉审核者</span> → <span class="edge-verdict">FRONTEND_DOC_DEFECT</span></div><div class="edge-item"><span class="edge-source">交叉审核者</span> → <span class="edge-verdict">BACKEND_DOC_DEFECT</span></div><div class="edge-item"><span class="edge-source">交叉审核者</span> → <span class="edge-verdict">BOTH_DOC_DEFECT</span></div></div>
+        </div>        <div class="role-card">
+          <div class="role-header">
+            <h3>交互逻辑设计师</h3>
+            <div class="role-badges"><span class="badge badge-auto">auto</span></div>
+          </div>
+<div class="section"><h4>📥 输入文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">前端需求规格文档</span><span class="file-path">outputs/前端需求规格文档.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">前端交互规范</span><span class="file-path">outputs/前端交互规范.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">交叉审核报告</span><span class="file-path">outputs/交叉审核报告.json, type=process</span></div></div>
+<div class="section"><h4>📤 输出文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">交互逻辑设计文档</span><span class="file-path">outputs/交互逻辑设计文档.md</span></div></div>
+
+
+
+<div class="section"><h4>📨 路由入边</h4><div class="edge-item"><span class="edge-source">交互逻辑设计师 + 美学布局设计师 + 接口翻译师</span> → <span class="edge-verdict">(无条件)</span></div></div>
+        </div>        <div class="role-card">
+          <div class="role-header">
+            <h3>美学布局设计师</h3>
+            <div class="role-badges"><span class="badge badge-auto">auto</span></div>
+          </div>
+<div class="section"><h4>📥 输入文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">前端需求规格文档</span><span class="file-path">outputs/前端需求规格文档.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">前端交互规范</span><span class="file-path">outputs/前端交互规范.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">交叉审核报告</span><span class="file-path">outputs/交叉审核报告.json, type=process</span></div></div>
+<div class="section"><h4>📤 输出文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">美学布局设计文档</span><span class="file-path">outputs/美学布局设计文档.md</span></div></div>
+
+
+
+<div class="section"><h4>📨 路由入边</h4><div class="edge-item"><span class="edge-source">交互逻辑设计师 + 美学布局设计师 + 接口翻译师</span> → <span class="edge-verdict">(无条件)</span></div></div>
+        </div>        <div class="role-card">
+          <div class="role-header">
+            <h3>接口翻译师</h3>
+            <div class="role-badges"><span class="badge badge-auto">auto</span></div>
+          </div>
+<div class="section"><h4>📥 输入文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">前端需求规格文档</span><span class="file-path">outputs/前端需求规格文档.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">后端需求规格文档</span><span class="file-path">outputs/后端需求规格文档.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">后端业务逻辑文档</span><span class="file-path">outputs/后端业务逻辑文档.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">交叉审核报告</span><span class="file-path">outputs/交叉审核报告.json, type=process</span></div></div>
+<div class="section"><h4>📤 输出文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">接口翻译文档</span><span class="file-path">outputs/接口翻译文档.md</span></div></div>
+
+
+<div class="section"><h4>🔀 路由出边</h4><div class="edge-item"><span class="edge-verdict">(无条件)</span> → <span class="edge-target">API契约设计师</span></div></div>
+<div class="section"><h4>📨 路由入边</h4><div class="edge-item"><span class="edge-source">接口翻译师</span> → <span class="edge-verdict">(无条件)</span></div><div class="edge-item"><span class="edge-source">交互逻辑设计师 + 美学布局设计师 + 接口翻译师</span> → <span class="edge-verdict">(无条件)</span></div></div>
+        </div>        <div class="role-card">
+          <div class="role-header">
+            <h3>后端架构设计师</h3>
+            <div class="role-badges"><span class="badge badge-auto">auto</span></div>
+          </div>
+<div class="section"><h4>📥 输入文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">后端需求规格文档</span><span class="file-path">outputs/后端需求规格文档.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">后端业务逻辑文档</span><span class="file-path">outputs/后端业务逻辑文档.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">交叉审核报告</span><span class="file-path">outputs/交叉审核报告.json, type=process</span></div></div>
+<div class="section"><h4>📤 输出文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">后端架构设计文档</span><span class="file-path">outputs/后端架构设计文档.md</span></div></div>
+
+
+
+<div class="section"><h4>📨 路由入边</h4><div class="edge-item"><span class="edge-source">后端架构设计师 + 数据模型设计师 + API契约设计师</span> → <span class="edge-verdict">(无条件)</span></div></div>
+        </div>        <div class="role-card">
+          <div class="role-header">
+            <h3>数据模型设计师</h3>
+            <div class="role-badges"><span class="badge badge-auto">auto</span></div>
+          </div>
+<div class="section"><h4>📥 输入文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">后端需求规格文档</span><span class="file-path">outputs/后端需求规格文档.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">后端业务逻辑文档</span><span class="file-path">outputs/后端业务逻辑文档.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">交叉审核报告</span><span class="file-path">outputs/交叉审核报告.json, type=process</span></div></div>
+<div class="section"><h4>📤 输出文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">数据库设计文档</span><span class="file-path">outputs/数据库设计文档.md</span></div></div>
+
+
+
+<div class="section"><h4>📨 路由入边</h4><div class="edge-item"><span class="edge-source">后端架构设计师 + 数据模型设计师 + API契约设计师</span> → <span class="edge-verdict">(无条件)</span></div></div>
+        </div>        <div class="role-card">
+          <div class="role-header">
+            <h3>API契约设计师</h3>
+            <div class="role-badges"><span class="badge badge-auto">auto</span></div>
+          </div>
+<div class="section"><h4>📥 输入文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">后端需求规格文档</span><span class="file-path">outputs/后端需求规格文档.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">后端业务逻辑文档</span><span class="file-path">outputs/后端业务逻辑文档.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">接口翻译文档</span><span class="file-path">outputs/接口翻译文档.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">交叉审核报告</span><span class="file-path">outputs/交叉审核报告.json, type=process</span></div></div>
+<div class="section"><h4>📤 输出文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">API详细设计文档</span><span class="file-path">outputs/API详细设计文档.md</span></div></div>
+
+
+
+<div class="section"><h4>📨 路由入边</h4><div class="edge-item"><span class="edge-source">后端架构设计师 + 数据模型设计师 + API契约设计师</span> → <span class="edge-verdict">(无条件)</span></div></div>
+        </div>        <div class="role-card">
+          <div class="role-header">
+            <h3>前端实现者</h3>
+            <div class="role-badges"><span class="badge badge-auto">auto</span></div>
+          </div>
+<div class="section"><h4>📥 输入文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">交互逻辑设计文档</span><span class="file-path">outputs/交互逻辑设计文档.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">美学布局设计文档</span><span class="file-path">outputs/美学布局设计文档.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">接口翻译文档</span><span class="file-path">outputs/接口翻译文档.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">合并校验报告</span><span class="file-path">outputs/合并校验报告.json, type=process</span></div></div>
+<div class="section"><h4>📤 输出文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">前端代码</span><span class="file-path">outputs/src/frontend/</span></div></div>
+
+
+<div class="section"><h4>🔀 路由出边</h4><div class="edge-item"><span class="edge-verdict">(无条件)</span> → <span class="edge-target">前端实现者（校验）</span></div></div>
+<div class="section"><h4>📨 路由入边</h4><div class="edge-item"><span class="edge-source">前端实现者</span> → <span class="edge-verdict">(无条件)</span></div></div>
+        </div>        <div class="role-card">
+          <div class="role-header">
+            <h3>后端实现者</h3>
+            <div class="role-badges"><span class="badge badge-auto">auto</span></div>
+          </div>
+<div class="section"><h4>📥 输入文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">后端架构设计文档</span><span class="file-path">outputs/后端架构设计文档.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">数据库设计文档</span><span class="file-path">outputs/数据库设计文档.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">API详细设计文档</span><span class="file-path">outputs/API详细设计文档.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">合并校验报告</span><span class="file-path">outputs/合并校验报告.json, type=process</span></div></div>
+<div class="section"><h4>📤 输出文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">后端代码</span><span class="file-path">outputs/src/backend/</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">数据库Schema</span><span class="file-path">outputs/prisma/schema.prisma</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">部署配置</span><span class="file-path">outputs/docker-compose.yml</span></div></div>
+
+
+<div class="section"><h4>🔀 路由出边</h4><div class="edge-item"><span class="edge-verdict">(无条件)</span> → <span class="edge-target">后端实现者（校验）</span></div></div>
+<div class="section"><h4>📨 路由入边</h4><div class="edge-item"><span class="edge-source">后端实现者</span> → <span class="edge-verdict">(无条件)</span></div></div>
+        </div>        <div class="role-card">
+          <div class="role-header">
+            <h3>预览部署者</h3>
+            <div class="role-badges"><span class="badge badge-manual">manual</span></div>
+          </div>
+<div class="section"><h4>📥 输入文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">前端代码</span><span class="file-path">outputs/src/frontend/</span></div></div>
+<div class="section"><h4>📤 输出文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">预览部署报告</span><span class="file-path">outputs/预览部署报告.json, type=process</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">组件状态目录页</span><span class="file-path">outputs/src/frontend/src/_preview/StatesShowcase.tsx</span></div></div>
+
+<div class="section"><h4>⚖️ Verdict</h4><div class="verdict-list"><span class="verdict-tag">confirmed</span></div></div>
+<div class="section"><h4>🔀 路由出边</h4><div class="edge-item"><span class="edge-verdict">confirmed</span> → <span class="edge-target">全栈联调验证者</span></div></div>
+<div class="section"><h4>📨 路由入边</h4><div class="edge-item"><span class="edge-source">预览部署者</span> → <span class="edge-verdict">confirmed</span></div></div>
+        </div>        <div class="role-card">
+          <div class="role-header">
+            <h3>后端启动验证者</h3>
+            <div class="role-badges"><span class="badge badge-auto">auto</span></div>
+          </div>
+<div class="section"><h4>📥 输入文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">后端代码</span><span class="file-path">outputs/src/backend/</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">数据库Schema</span><span class="file-path">outputs/prisma/schema.prisma</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">部署配置</span><span class="file-path">outputs/docker-compose.yml</span></div></div>
+<div class="section"><h4>📤 输出文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">后端启动验证报告</span><span class="file-path">outputs/后端启动验证报告.json, type=process</span></div></div>
+
+<div class="section"><h4>⚖️ Verdict</h4><div class="verdict-list"><span class="verdict-tag">BACKEND_BLOCKING</span><span class="verdict-tag">confirmed</span></div></div>
+<div class="section"><h4>🔀 路由出边</h4><div class="edge-item"><span class="edge-verdict">confirmed</span> → <span class="edge-target">全栈联调验证者</span></div><div class="edge-item"><span class="edge-verdict">BACKEND_BLOCKING</span> → <span class="edge-target">后端实现者</span></div></div>
+<div class="section"><h4>📨 路由入边</h4><div class="edge-item"><span class="edge-source">后端启动验证者</span> → <span class="edge-verdict">confirmed</span></div><div class="edge-item"><span class="edge-source">后端启动验证者</span> → <span class="edge-verdict">BACKEND_BLOCKING</span></div></div>
+        </div>        <div class="role-card">
+          <div class="role-header">
+            <h3>全栈联调验证者</h3>
+            <div class="role-badges"><span class="badge badge-manual">manual</span></div>
+          </div>
+<div class="section"><h4>📥 输入文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">前端代码</span><span class="file-path">outputs/src/frontend/</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">后端代码</span><span class="file-path">outputs/src/backend/</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">数据库Schema</span><span class="file-path">outputs/prisma/schema.prisma</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">部署配置</span><span class="file-path">outputs/docker-compose.yml</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">接口翻译文档</span><span class="file-path">outputs/接口翻译文档.md</span></div></div>
+<div class="section"><h4>📤 输出文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">联调验证报告</span><span class="file-path">outputs/联调验证报告.json, type=process</span></div></div>
+
+<div class="section"><h4>⚖️ Verdict</h4><div class="verdict-list"><span class="verdict-tag">BACKEND_BLOCKING</span><span class="verdict-tag">FRONTEND_BLOCKING</span><span class="verdict-tag">confirmed</span><span class="verdict-tag">design_fix</span></div></div>
+<div class="section"><h4>🔀 路由出边</h4><div class="edge-item"><span class="edge-verdict">confirmed</span> → <span class="edge-target">合并校验者</span></div><div class="edge-item"><span class="edge-verdict">FRONTEND_BLOCKING</span> → <span class="edge-target">前端实现者</span></div><div class="edge-item"><span class="edge-verdict">BACKEND_BLOCKING</span> → <span class="edge-target">后端实现者</span></div><div class="edge-item"><span class="edge-verdict">design_fix</span> → <span class="edge-target">[交互逻辑设计师, 美学布局设计师]</span></div></div>
+<div class="section"><h4>📨 路由入边</h4><div class="edge-item"><span class="edge-source">全栈联调验证者</span> → <span class="edge-verdict">confirmed</span></div><div class="edge-item"><span class="edge-source">全栈联调验证者</span> → <span class="edge-verdict">FRONTEND_BLOCKING</span></div><div class="edge-item"><span class="edge-source">全栈联调验证者</span> → <span class="edge-verdict">BACKEND_BLOCKING</span></div><div class="edge-item"><span class="edge-source">全栈联调验证者</span> → <span class="edge-verdict">design_fix</span></div></div>
+        </div>        <div class="role-card">
+          <div class="role-header">
+            <h3>合并校验者</h3>
+            <div class="role-badges"><span class="badge badge-auto">auto</span></div>
+          </div>
+<div class="section"><h4>📥 输入文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">前端代码</span><span class="file-path">outputs/src/frontend/</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">后端代码</span><span class="file-path">outputs/src/backend/</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">数据库Schema</span><span class="file-path">outputs/prisma/schema.prisma</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">部署配置</span><span class="file-path">outputs/docker-compose.yml</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">前端需求规格文档</span><span class="file-path">outputs/前端需求规格文档.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">后端需求规格文档</span><span class="file-path">outputs/后端需求规格文档.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">API详细设计文档</span><span class="file-path">outputs/API详细设计文档.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">接口翻译文档</span><span class="file-path">outputs/接口翻译文档.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">联调验证报告</span><span class="file-path">outputs/联调验证报告.json, type=process</span></div></div>
+<div class="section"><h4>📤 输出文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">合并校验报告</span><span class="file-path">outputs/合并校验报告.json, type=process</span></div></div>
+
+<div class="section"><h4>⚖️ Verdict</h4><div class="verdict-list"><span class="verdict-tag">BACKEND_BLOCKING</span><span class="verdict-tag">FRONTEND_BLOCKING</span><span class="verdict-tag">confirmed</span></div></div>
+<div class="section"><h4>🔀 路由出边</h4><div class="edge-item"><span class="edge-verdict">confirmed</span> → <span class="edge-target">部署文档管理者</span></div><div class="edge-item"><span class="edge-verdict">FRONTEND_BLOCKING</span> → <span class="edge-target">前端实现者</span></div><div class="edge-item"><span class="edge-verdict">BACKEND_BLOCKING</span> → <span class="edge-target">后端实现者</span></div></div>
+<div class="section"><h4>📨 路由入边</h4><div class="edge-item"><span class="edge-source">合并校验者</span> → <span class="edge-verdict">confirmed</span></div><div class="edge-item"><span class="edge-source">合并校验者</span> → <span class="edge-verdict">FRONTEND_BLOCKING</span></div><div class="edge-item"><span class="edge-source">合并校验者</span> → <span class="edge-verdict">BACKEND_BLOCKING</span></div></div>
+        </div>        <div class="role-card">
+          <div class="role-header">
+            <h3>部署文档管理者</h3>
+            <div class="role-badges"><span class="badge badge-auto">auto</span></div>
+          </div>
+<div class="section"><h4>📥 输入文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">前端代码</span><span class="file-path">outputs/src/frontend/</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">后端代码</span><span class="file-path">outputs/src/backend/</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">部署配置</span><span class="file-path">outputs/docker-compose.yml</span></div><div class="file-item file-exists"><span class="file-icon">✓</span><span class="file-name">App架构文件</span><span class="file-path">app.yaml</span></div></div>
+<div class="section"><h4>📤 输出文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">部署指南</span><span class="file-path">outputs/部署指南.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">运维手册</span><span class="file-path">outputs/运维手册.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">变更日志</span><span class="file-path">outputs/CHANGELOG.md</span></div></div>
+
+
+<div class="section"><h4>🔀 路由出边</h4><div class="edge-item"><span class="edge-verdict">(无条件)</span> → <span class="edge-target">综合裁决者</span></div></div>
+<div class="section"><h4>📨 路由入边</h4><div class="edge-item"><span class="edge-source">部署文档管理者</span> → <span class="edge-verdict">(无条件)</span></div></div>
+        </div>        <div class="role-card">
+          <div class="role-header">
+            <h3>综合裁决者</h3>
+            <div class="role-badges"><span class="badge badge-manual">manual</span></div>
+          </div>
+<div class="section"><h4>📥 输入文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">前端需求规格文档</span><span class="file-path">outputs/前端需求规格文档.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">后端需求规格文档</span><span class="file-path">outputs/后端需求规格文档.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">交叉审核报告</span><span class="file-path">outputs/交叉审核报告.json, type=process</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">合并校验报告</span><span class="file-path">outputs/合并校验报告.json, type=process</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">部署指南</span><span class="file-path">outputs/部署指南.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">运维手册</span><span class="file-path">outputs/运维手册.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">变更日志</span><span class="file-path">outputs/CHANGELOG.md</span></div></div>
+<div class="section"><h4>📤 输出文件</h4><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">最终裁决书</span><span class="file-path">outputs/最终裁决书.md</span></div><div class="file-item file-missing"><span class="file-icon">✗</span><span class="file-name">构建报告</span><span class="file-path">outputs/构建报告.md</span></div></div>
+
+<div class="section"><h4>⚖️ Verdict</h4><div class="verdict-list"><span class="verdict-tag">challenged</span><span class="verdict-tag">confirmed</span><span class="verdict-tag">deploy_doc_defect</span><span class="verdict-tag">doc_challenged</span></div></div>
+<div class="section"><h4>🔀 路由出边</h4><div class="edge-item"><span class="edge-verdict">confirmed</span> → <span class="edge-target">迭代守门人</span></div><div class="edge-item"><span class="edge-verdict">challenged</span> → <span class="edge-target">需求分流者</span></div><div class="edge-item"><span class="edge-verdict">doc_challenged</span> → <span class="edge-target">[前端文档管理者, 后端文档管理者]</span></div><div class="edge-item"><span class="edge-verdict">deploy_doc_defect</span> → <span class="edge-target">部署文档管理者</span></div></div>
+<div class="section"><h4>📨 路由入边</h4><div class="edge-item"><span class="edge-source">综合裁决者</span> → <span class="edge-verdict">confirmed</span></div><div class="edge-item"><span class="edge-source">综合裁决者</span> → <span class="edge-verdict">challenged</span></div><div class="edge-item"><span class="edge-source">综合裁决者</span> → <span class="edge-verdict">doc_challenged</span></div><div class="edge-item"><span class="edge-source">综合裁决者</span> → <span class="edge-verdict">deploy_doc_defect</span></div></div>
+        </div>
+</div>
+
+<h2>🔀 边详情表</h2>
+<table>
+  <thead><tr><th>Source</th><th>Target</th><th>Verdict</th><th>Carries</th><th>Max</th><th>Restrict</th></tr></thead>
+  <tbody>          <tr>
+            <td>迭代守门人 </td>
+            <td>需求接收者</td>
+            <td><span class="verdict-tag">fresh_start</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>迭代守门人 </td>
+            <td>全栈联调验证者</td>
+            <td><span class="verdict-tag">incremental</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>迭代守门人 </td>
+            <td>完成</td>
+            <td><span class="verdict-tag">done</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>需求接收者 </td>
+            <td>需求接收者（校验）</td>
+            <td><span class="verdict-tag">(无条件)</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>前端实现者 </td>
+            <td>前端实现者（校验）</td>
+            <td><span class="verdict-tag">(无条件)</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>后端实现者 </td>
+            <td>后端实现者（校验）</td>
+            <td><span class="verdict-tag">(无条件)</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>需求接收者（校验） </td>
+            <td>需求审计者</td>
+            <td><span class="verdict-tag">(无条件)</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>需求审计者 </td>
+            <td>需求分流者</td>
+            <td><span class="verdict-tag">confirmed</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>需求分流者 </td>
+            <td>[前端文档管理者, 后端文档管理者]</td>
+            <td><span class="verdict-tag">(无条件)</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>前端文档管理者 + 后端文档管理者 <span class="badge badge-join">JOIN</span></td>
+            <td>交叉审核者</td>
+            <td><span class="verdict-tag">(无条件)</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>交叉审核者 </td>
+            <td>[交互逻辑设计师, 美学布局设计师, 接口翻译师, 后端架构设计师, 数据模型设计师]</td>
+            <td><span class="verdict-tag">confirmed</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>接口翻译师 </td>
+            <td>API契约设计师</td>
+            <td><span class="verdict-tag">(无条件)</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>交互逻辑设计师 + 美学布局设计师 + 接口翻译师 <span class="badge badge-join">JOIN</span></td>
+            <td>前端实现者</td>
+            <td><span class="verdict-tag">(无条件)</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>后端架构设计师 + 数据模型设计师 + API契约设计师 <span class="badge badge-join">JOIN</span></td>
+            <td>后端实现者</td>
+            <td><span class="verdict-tag">(无条件)</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>前端实现者（校验） </td>
+            <td>预览部署者</td>
+            <td><span class="verdict-tag">(无条件)</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>后端实现者（校验） </td>
+            <td>后端启动验证者</td>
+            <td><span class="verdict-tag">confirmed</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>预览部署者 </td>
+            <td>全栈联调验证者</td>
+            <td><span class="verdict-tag">confirmed</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>后端启动验证者 </td>
+            <td>全栈联调验证者</td>
+            <td><span class="verdict-tag">confirmed</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>全栈联调验证者 </td>
+            <td>合并校验者</td>
+            <td><span class="verdict-tag">confirmed</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>合并校验者 </td>
+            <td>部署文档管理者</td>
+            <td><span class="verdict-tag">confirmed</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>部署文档管理者 </td>
+            <td>综合裁决者</td>
+            <td><span class="verdict-tag">(无条件)</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>综合裁决者 </td>
+            <td>迭代守门人</td>
+            <td><span class="verdict-tag">confirmed</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>需求接收者（校验） </td>
+            <td>需求接收者</td>
+            <td><span class="verdict-tag">loop</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>前端实现者（校验） </td>
+            <td>前端实现者</td>
+            <td><span class="verdict-tag">loop</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>后端实现者（校验） </td>
+            <td>后端实现者</td>
+            <td><span class="verdict-tag">loop</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>需求审计者 </td>
+            <td>需求接收者</td>
+            <td><span class="verdict-tag">challenged</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>交叉审核者 </td>
+            <td>前端文档管理者</td>
+            <td><span class="verdict-tag">FRONTEND_DOC_DEFECT</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>交叉审核者 </td>
+            <td>后端文档管理者</td>
+            <td><span class="verdict-tag">BACKEND_DOC_DEFECT</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>交叉审核者 </td>
+            <td>[前端文档管理者, 后端文档管理者]</td>
+            <td><span class="verdict-tag">BOTH_DOC_DEFECT</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>后端启动验证者 </td>
+            <td>后端实现者</td>
+            <td><span class="verdict-tag">BACKEND_BLOCKING</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>全栈联调验证者 </td>
+            <td>前端实现者</td>
+            <td><span class="verdict-tag">FRONTEND_BLOCKING</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>全栈联调验证者 </td>
+            <td>后端实现者</td>
+            <td><span class="verdict-tag">BACKEND_BLOCKING</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>全栈联调验证者 </td>
+            <td>[交互逻辑设计师, 美学布局设计师]</td>
+            <td><span class="verdict-tag">design_fix</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>合并校验者 </td>
+            <td>前端实现者</td>
+            <td><span class="verdict-tag">FRONTEND_BLOCKING</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>合并校验者 </td>
+            <td>后端实现者</td>
+            <td><span class="verdict-tag">BACKEND_BLOCKING</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>综合裁决者 </td>
+            <td>需求分流者</td>
+            <td><span class="verdict-tag">challenged</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>综合裁决者 </td>
+            <td>[前端文档管理者, 后端文档管理者]</td>
+            <td><span class="verdict-tag">doc_challenged</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td>综合裁决者 </td>
+            <td>部署文档管理者</td>
+            <td><span class="verdict-tag">deploy_doc_defect</span></td>
+            <td class="carries-cell">--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>
+  </tbody>
+</table>
+
+<h2>📦 文件流转分析</h2>
+<table>
+  <thead><tr><th>文件路径</th><th>生产者</th><th>消费者</th></tr></thead>
+  <tbody>          <tr>
+            <td class="file-exists">✓ 00-需求描述.md</td>
+            <td>需求接收者</td>
+            <td>需求审计者, 需求分流者</td>
+          </tr>          <tr>
+            <td class="file-exists">✓ app.yaml</td>
+            <td>--</td>
+            <td>部署文档管理者</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ outputs/API详细设计文档.md</td>
+            <td>API契约设计师</td>
+            <td>后端实现者, 合并校验者</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ outputs/CHANGELOG.md</td>
+            <td>部署文档管理者</td>
+            <td>综合裁决者</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ outputs/docker-compose.yml</td>
+            <td>后端实现者</td>
+            <td>后端启动验证者, 全栈联调验证者, 合并校验者, 部署文档管理者</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ outputs/prisma/schema.prisma</td>
+            <td>后端实现者</td>
+            <td>后端启动验证者, 全栈联调验证者, 合并校验者</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ outputs/src/backend/</td>
+            <td>后端实现者</td>
+            <td>后端启动验证者, 全栈联调验证者, 合并校验者, 部署文档管理者</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ outputs/src/frontend/</td>
+            <td>前端实现者</td>
+            <td>预览部署者, 全栈联调验证者, 合并校验者, 部署文档管理者</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ outputs/src/frontend/src/_preview/StatesShowcase.tsx</td>
+            <td>预览部署者</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ outputs/交互逻辑设计文档.md</td>
+            <td>交互逻辑设计师</td>
+            <td>前端实现者</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ outputs/交叉审核报告.json, type=process</td>
+            <td>交叉审核者</td>
+            <td>前端文档管理者, 后端文档管理者, 交互逻辑设计师, 美学布局设计师, 接口翻译师, 后端架构设计师, 数据模型设计师, API契约设计师, 综合裁决者</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ outputs/前端交互规范.md</td>
+            <td>前端文档管理者</td>
+            <td>交叉审核者, 交互逻辑设计师, 美学布局设计师</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ outputs/前端需求摘要.md</td>
+            <td>需求分流者</td>
+            <td>前端文档管理者</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ outputs/前端需求规格文档.md</td>
+            <td>前端文档管理者</td>
+            <td>交叉审核者, 交互逻辑设计师, 美学布局设计师, 接口翻译师, 合并校验者, 综合裁决者</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ outputs/合并校验报告.json, type=process</td>
+            <td>合并校验者</td>
+            <td>前端实现者, 后端实现者, 综合裁决者</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ outputs/后端业务逻辑文档.md</td>
+            <td>后端文档管理者</td>
+            <td>交叉审核者, 接口翻译师, 后端架构设计师, 数据模型设计师, API契约设计师</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ outputs/后端启动验证报告.json, type=process</td>
+            <td>后端启动验证者</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ outputs/后端架构设计文档.md</td>
+            <td>后端架构设计师</td>
+            <td>后端实现者</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ outputs/后端需求摘要.md</td>
+            <td>需求分流者</td>
+            <td>后端文档管理者</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ outputs/后端需求规格文档.md</td>
+            <td>后端文档管理者</td>
+            <td>交叉审核者, 接口翻译师, 后端架构设计师, 数据模型设计师, API契约设计师, 合并校验者, 综合裁决者</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ outputs/接口翻译文档.md</td>
+            <td>接口翻译师</td>
+            <td>API契约设计师, 前端实现者, 全栈联调验证者, 合并校验者</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ outputs/数据库设计文档.md</td>
+            <td>数据模型设计师</td>
+            <td>后端实现者</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ outputs/最终裁决书.md</td>
+            <td>综合裁决者</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ outputs/构建报告.md</td>
+            <td>综合裁决者</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ outputs/美学布局设计文档.md</td>
+            <td>美学布局设计师</td>
+            <td>前端实现者</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ outputs/联调验证报告.json, type=process</td>
+            <td>全栈联调验证者</td>
+            <td>合并校验者</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ outputs/运维手册.md</td>
+            <td>部署文档管理者</td>
+            <td>综合裁决者</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ outputs/部署指南.md</td>
+            <td>部署文档管理者</td>
+            <td>综合裁决者</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ outputs/需求审计报告.json, type=process</td>
+            <td>需求审计者</td>
+            <td>需求分流者</td>
+          </tr>          <tr>
+            <td class="file-missing">✗ outputs/预览部署报告.json, type=process</td>
+            <td>预览部署者</td>
+            <td>--</td>
+          </tr>
+  </tbody>
+</table>
+
+<h2>📚 知识注入矩阵</h2>
+<table>
+  <thead><tr><th>知识名称</th><th>路径</th><th>注入到</th></tr></thead>
+  <tbody>          <tr>
+            <td class="file-exists">✓ 前端拖拽交互最佳实践</td>
+            <td>knowledge/前端拖拽交互最佳实践.md</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td class="file-exists">✓ 树形数据结构存储优化</td>
+            <td>knowledge/树形数据结构存储优化.md</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td class="file-exists">✓ 文档驱动开发方法论</td>
+            <td>knowledge/文档驱动开发方法论.md</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td class="file-exists">✓ 精力管理领域知识</td>
+            <td>knowledge/精力管理领域知识.md</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td class="file-exists">✓ 校验标准手册</td>
+            <td>knowledge/校验标准手册.md</td>
+            <td>--</td>
+          </tr>          <tr>
+            <td class="file-exists">✓ 全栈启动验证最佳实践</td>
+            <td>knowledge/全栈启动验证最佳实践.md</td>
+            <td>--</td>
+          </tr>
+  </tbody>
+</table>
+
+<footer>
+  Generated by app_inspector.py · lxp-eng-planning
+</footer>
+
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'dark', flowchart: { curve: 'basis', padding: 20 } });
+</script>
+</body>
+</html>

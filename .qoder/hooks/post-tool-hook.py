@@ -170,9 +170,12 @@ def format_directive(step_result):
         if artifact_lines:
             artifact_section = "\n\n请查看以下产物文件：\n" + "\n".join(artifact_lines) + "\n"
         
-        return (f"【主Agent指令】向用户展示确认请求：{steps_desc}。{artifact_section}"
+        # confirm 注入中显式携带 workspace_id，防止主 Agent → stability-analyzer → Hook② 流转中丢失
+        ws_id = step_result.get("workspace_id", "")
+        ws_id_hint = f"（workspace_id: {ws_id}）" if ws_id else ""
+        return (f"【主Agent指令】向用户展示确认请求：{steps_desc}{ws_id_hint}。{artifact_section}"
                 f"等待用户回复 confirmed 或 fail，"
-                f"然后将用户回复原样传递给 Task(stability-analyzer)。")
+                f"然后将用户回复原样传递给 Task(stability-analyzer)。" )
     if action == "wait":
         reason = step_result.get("reason", "等待中")
         return f"【主Agent指令】BLOCKING：{reason}。向用户报告当前状态并等待介入。"
@@ -575,7 +578,7 @@ def handle_role_executor_return(tool_output, workspace_id):
             all_pending.extend(r.get("pending", []))
         all_gate_errors = _collect_all_gate_errors(all_results)
         steps_desc = ", ".join(p.get("step", "?") for p in all_pending) if all_pending else "未知步骤"
-        lines = [f"向用户展示确认请求：{steps_desc}。"]
+        lines = [f"向用户展示确认请求：{steps_desc}（workspace_id: {sid}）。"]
         if all_gate_errors:
             lines.append(f"Gate 详情：{all_gate_errors}")
         lines.append("等待用户回复 confirmed 或 fail 后，将用户回复原样传递给 Task(stability-analyzer)。")

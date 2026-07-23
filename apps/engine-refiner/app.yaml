@@ -1,0 +1,183 @@
+app_name: engine-refiner
+
+# ═══════════════════════════════════════════════════════════════
+# engine-refiner — 引擎自迭代精炼师
+# ═══════════════════════════════════════════════════════════════
+#
+# 版本: v1
+#
+# 设计哲学：证伪驱动 —— 每一步产出都要经过红队证伪
+#   红队的目标不是"审查"而是"推翻"，只有推翻失败才放行
+#
+# 设计目标：在不改变现有逻辑的基础上，清除引擎代码库中的
+#   低效实现、bug 逻辑、不优雅代码。所有改动必须保持行为等价。
+#
+# §1  编排总览（三层 × 三对抗）
+#     发现层 → 漏洞发现者 + 漏洞证伪红队
+#     设计层 → 修复方案设计师 + 方案审查红队
+#     执行层 → 代码执行者 + 执行审查红队
+#
+# §2  三条对抗回路
+#     a) 漏洞证伪回路 —— 漏洞证伪红队 disproved → 漏洞发现者
+#        红队成功证明漏洞为伪阳性（误报），退回重新发现
+#     b) 方案审查回路 —— 方案审查红队 rejected → 修复方案设计师 max: 5
+#        红队成功证明方案有风险/不优雅/非机制级修复，退回重新设计
+#     c) 执行修复回路 —— 执行审查红队 has_defects → 代码执行者 max: 3
+#        红队成功证明执行引入了错误，退回重新执行
+#
+# §3  红队对抗目标（证伪而非审查）
+#     漏洞证伪红队：尽力证明漏洞是伪阳性（误报/不成立）
+#       → 证伪失败（找不到反驳理由）= 漏洞为真 → confirmed 放行
+#     方案审查红队：尽力证明方案会引入新问题 或 方案不优雅/治标不治本
+#       → 证伪失败（找不到反驳理由）= 方案安全优雅 → approved 放行
+#     执行审查红队：尽力证明执行引入了错误
+#       → 证伪失败（找不到错误）= 执行正确 → clean 放行
+#
+# §4  行为不变性铁律
+#     所有代码改动必须保持外部行为完全等价
+#     禁止修改函数签名、控制流语义、数据结构
+#     修复方案必须标注 behavior_preserved: true 并说明等价性理由
+#
+# §5  知识文档清单（4 份）
+#     a) 引擎代码架构地图 → 漏洞发现者（全局视角定位问题）
+#     b) 代码异味识别指南 → 漏洞发现者（4 维度检查项标准）
+#     c) 安全重构原则 → 修复方案设计师（行为保持型重构规范）
+#     d) 证伪方法论 → 三支红队（证伪技巧与判定标准）
+# ═══════════════════════════════════════════════════════════════
+
+knowledge:
+  - 引擎代码架构地图: knowledge/引擎代码架构地图.md
+    inject_to: [漏洞发现者]
+  - 代码异味识别指南: knowledge/代码异味识别指南.md
+    inject_to: [漏洞发现者]
+  - 安全重构原则: knowledge/安全重构原则.md
+    inject_to: [修复方案设计师]
+  - 证伪方法论: knowledge/证伪方法论.md
+    inject_to: [漏洞证伪红队, 方案审查红队, 执行审查红队]
+
+roles:
+  # ═══ 入口层 ═══
+
+  # producer 入口角色，confirm: manual（唯一人工确认点）
+  # 接收用户优化指令，界定优化范围与约束
+  需求接收者:
+    type: producer
+    confirm: manual
+    outputs:
+      - 需求文档: 00-需求描述.md
+
+  # ═══ 发现层 ═══
+
+  # 扫描 engine/scripts/ + engine/sdk/ + engine/schemas/，
+  # 按 4 维度（效率/简洁/一致性/优雅）找出代码问题
+  # 产出结构化漏洞清单（文件、行号、维度、严重度、描述）
+  漏洞发现者:
+    type: standard
+    confirm: auto
+    inputs:
+      - 需求文档: 00-需求描述.md
+    outputs:
+      - 漏洞清单: outputs/漏洞清单.json, type=process
+
+  # 对抗目标：证伪 —— 尽力证明漏洞清单中的每一项是伪阳性
+  # 检查维度：误报 / 功能必要逻辑 / 历史遗留兼容性补偿
+  # 证伪失败（找不到反驳理由）= 漏洞为真 → confirmed
+  # 证伪成功（能证明是伪漏洞）= disproved → 回退漏洞发现者
+  漏洞证伪红队:
+    type: standard
+    confirm: auto
+    inputs:
+      - 漏洞清单: outputs/漏洞清单.json, type=process
+    outputs:
+      - 证伪报告: outputs/漏洞证伪报告.json, type=process
+
+  # ═══ 设计层 ═══
+
+  # 针对确认的真实漏洞，设计行为保持型修复方案
+  # 每个方案必须标注 behavior_preserved + elegance_score + risk_assessment
+  修复方案设计师:
+    type: standard
+    confirm: auto
+    inputs:
+      - 漏洞清单: outputs/漏洞清单.json, type=process
+      - 证伪报告: outputs/漏洞证伪报告.json, type=process
+      # [可选输入] 方案审查红队 rejected 回退时存在
+      - 方案审查报告: outputs/方案审查报告.json, type=process
+    outputs:
+      - 修复方案: outputs/修复方案.json, type=process
+
+  # 对抗目标：证伪 —— 尽力证明修复方案有问题
+  # 检查维度：引入新错误 / 不优雅 / 不是机制级修复
+  # 证伪失败（找不到反驳理由）= 方案安全优雅 → approved
+  # 证伪成功（能证明方案有问题）= rejected → 回退修复方案设计师
+  方案审查红队:
+    type: standard
+    confirm: auto
+    inputs:
+      - 修复方案: outputs/修复方案.json, type=process
+    outputs:
+      - 方案审查报告: outputs/方案审查报告.json, type=process
+
+  # ═══ 执行层 ═══
+
+  # 按修复方案执行代码修改
+  # 每次修改后执行语法校验，清除 __pycache__
+  代码执行者:
+    type: standard
+    confirm: auto
+    inputs:
+      - 修复方案: outputs/修复方案.json, type=process
+      # [可选输入] 执行审查红队 has_defects 回退时存在
+      - 执行审查报告: outputs/执行审查报告.json, type=process
+    outputs:
+      - 执行报告: outputs/执行报告.json, type=process
+
+  # 对抗目标：证伪 —— 尽力证明执行引入了错误
+  # 检查维度：语法错误 / 实现偏差 / 新代码异味 / 行为等价性破坏
+  # 证伪失败（找不到错误）= 执行正确 → clean
+  # 证伪成功（找到了错误）= has_defects → 回退代码执行者
+  执行审查红队:
+    type: standard
+    confirm: auto
+    inputs:
+      - 修复方案: outputs/修复方案.json, type=process
+      - 执行报告: outputs/执行报告.json, type=process
+    outputs:
+      - 执行审查报告: outputs/执行审查报告.json, type=process
+
+  # ═══ 报告层 ═══
+  改进报告生成者:
+    type: standard
+    confirm: auto
+    inputs:
+      - 漏洞清单: outputs/漏洞清单.json, type=process
+      - 证伪报告: outputs/漏洞证伪报告.json, type=process
+      - 修复方案: outputs/修复方案.json, type=process
+      - 方案审查报告: outputs/方案审查报告.json, type=process
+      - 执行报告: outputs/执行报告.json, type=process
+      - 执行审查报告: outputs/执行审查报告.json, type=process
+    outputs:
+      - 改进报告: 改进报告.md
+
+edges:
+  # ═══ 入口 → 发现层 ═══
+  - 需求接收者 → 漏洞发现者 when: result.verdict == "confirmed"
+  - 需求接收者 → 需求接收者 when: result.verdict == "loop"
+
+  # ═══ 发现层：漏洞发现 → 证伪 ═══
+  - 漏洞发现者 → 漏洞证伪红队 when: result.verdict == "has_issues"
+  - 漏洞证伪红队 → 修复方案设计师 when: result.verdict == "confirmed"
+  - 漏洞证伪红队 → 漏洞发现者 when: result.verdict == "disproved"
+
+  # ═══ 设计层：方案设计 → 审查 ═══
+  - 修复方案设计师 → 方案审查红队 when: result.verdict == "confirmed"
+  - 方案审查红队 → 代码执行者 when: result.verdict == "approved"
+  - 方案审查红队 → 修复方案设计师 when: result.verdict == "rejected" max_executions: 5
+
+  # ═══ 执行层：执行 → 审查 ═══
+  - 代码执行者 → 执行审查红队 when: result.verdict == "confirmed"
+  - 执行审查红队 → 改进报告生成者 when: result.verdict == "clean"
+  - 执行审查红队 → 代码执行者 when: result.verdict == "has_defects" max_executions: 3
+
+  # ═══ 终态 ═══
+  - 改进报告生成者 → 完成

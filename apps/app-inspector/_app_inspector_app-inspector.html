@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>app-inspector</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:-apple-system,'PingFang SC',sans-serif;background:#0f172a;color:#e2e8f0;overflow:hidden;}
+
+#topbar{position:fixed;top:0;left:0;right:0;z-index:50;height:42px;background:#1e293b;border-bottom:1px solid #334155;display:flex;align-items:center;gap:12px;padding:0 20px;}
+#topbar h1{font-size:15px;color:#38bdf8;white-space:nowrap;}
+#topbar .legend{display:flex;gap:10px;font-size:11px;color:#64748b;}
+#topbar .legend span{display:flex;align-items:center;gap:3px;}
+#topbar .ctrls{margin-left:auto;display:flex;gap:6px;align-items:center;}
+#topbar button{background:#334155;border:1px solid #475569;color:#e2e8f0;border-radius:5px;padding:3px 10px;font-size:12px;cursor:pointer;}
+#topbar button:hover{background:#475569;}
+#topbar .zv{color:#64748b;font-size:11px;min-width:36px;text-align:center;}
+
+#cwrap{position:fixed;top:42px;left:0;right:0;bottom:0;overflow:hidden;}
+#svgc{transform-origin:0 0;}
+
+.node-role{cursor:pointer;transition:opacity 0.2s;}
+.node-role:hover rect{stroke-width:3;filter:brightness(1.4);}
+.node-file{cursor:pointer;transition:opacity 0.2s;}
+.node-file:hover rect{stroke-width:2;filter:brightness(1.4);}
+
+/* 悬停高亮动画 */
+.link{transition:stroke-opacity 0.3s,stroke-width 0.3s;}
+@keyframes pulse-green{0%,100%{stroke-opacity:0.7;stroke-width:2;}50%{stroke-opacity:1;stroke-width:3.5;}}
+@keyframes pulse-red{0%,100%{stroke-opacity:0.7;stroke-width:2;}50%{stroke-opacity:1;stroke-width:3.5;}}
+@keyframes flow-dash{to{stroke-dashoffset:-20;}}
+
+.link-active-green{animation:pulse-green 1s ease-in-out infinite;stroke-dasharray:6,4 !important;stroke:#4ade80 !important;}
+.link-active-kn{animation:pulse-green 1s ease-in-out infinite;stroke-dasharray:6,4 !important;stroke:#818cf8 !important;}
+.link-active-red{animation:pulse-red 1s ease-in-out infinite;stroke-dasharray:6,4 !important;stroke:#f87171 !important;}
+.link-dim{stroke-opacity:0.03 !important;}
+.node-dim{opacity:0.15 !important;}
+.node-highlight rect{filter:brightness(1.5) drop-shadow(0 0 6px currentColor);}
+
+/* tooltip */
+#tt{display:none;position:fixed;z-index:100;background:#1e293b;border:1px solid #475569;border-radius:8px;max-width:380px;max-height:75vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.7);font-size:11px;}
+#tt .th{background:#334155;padding:7px 11px;border-radius:8px 8px 0 0;font-size:14px;font-weight:bold;color:#f1f5f9;}
+#tt .tb{padding:8px 11px;}
+#tt .ts{margin-bottom:8px;}
+#tt .ts h4{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:#818cf8;margin-bottom:3px;}
+#tt .tr{display:flex;align-items:baseline;gap:4px;padding:1px 0;line-height:1.3;}
+#tt .tr .fn{color:#cbd5e1;min-width:60px;font-size:10px;}
+#tt .tr .fp{color:#64748b;font-family:monospace;font-size:9px;word-break:break-all;}
+#tt .vt{display:inline-block;background:#312e81;color:#a5b4fc;padding:1px 5px;border-radius:4px;font-family:monospace;font-size:9px;margin:1px;}
+#tt .er{padding:1px 0;color:#94a3b8;font-size:10px;}
+#tt .ev{color:#a5b4fc;font-family:monospace;}
+#tt .et{color:#4ade80;}
+#tt .cat-kn{color:#a5b4fc;}#tt .cat-ws{color:#4ade80;}#tt .cat-ext{color:#fbbf24;}
+</style>
+</head>
+<body>
+<div id="topbar">
+  <h1>&#128203; app-inspector</h1>
+  <div class="legend">
+    <span><span style="color:#38bdf8">&#9881;</span> Role</span>
+    <span><span style="color:#a5b4fc">&#128218;</span> Knowledge</span>
+    <span><span style="color:#4ade80">&#128230;</span> Workspace</span>
+    <span><span style="color:#fbbf24">&#128196;</span> External</span>
+    <span style="color:#64748b;">| &#128161; &#25335;&#20197;&#36873;&#20013; Role &#30475;&#27880;&#20837;/&#36755;&#20986;&#21160;&#30011;</span>
+  </div>
+  <div class="ctrls">
+    <button onclick="zb(-0.1)">&#128196;</button>
+    <span class="zv" id="zv">100%</span>
+    <button onclick="zb(0.1)">&#128197;</button>
+    <button onclick="rv()">Reset</button>
+  </div>
+</div>
+<div id="cwrap"><div id="svgc">
+<svg width="1970" height="326" xmlns="http://www.w3.org/2000/svg" style="background:#0f172a">
+<rect x="5" y="55" width="230" height="145" rx="8" fill="rgba(99,102,241,0.05)" stroke="rgba(99,102,241,0.15)" stroke-width="1"/>
+<text x="15" y="50" fill="#818cf8" font-size="13" font-weight="600">📚 Knowledge</text>
+<rect x="1696" y="55" width="240" height="211" rx="8" fill="rgba(74,222,128,0.05)" stroke="rgba(74,222,128,0.15)" stroke-width="1"/>
+<text x="1706" y="50" fill="#4ade80" font-size="13" font-weight="600">📦 Workspace 产物</text>
+<text x="300" y="32" fill="#fbbf24" font-size="13" font-weight="600">📄 External</text>
+<g id="links">
+<path d="M365,130 C365,105 655,105 655,80" stroke="#38bdf8" stroke-width="1.5" stroke-opacity="0.4" fill="none" class="link link-verdict" style="normal" data-from="r0_0" data-to="r1_0" id="r0_0__r1_0"/>
+<text x="510" y="105" fill="#38bdf8" font-size="9" text-anchor="middle" opacity="0.6" class="edge-label">spec_ready</text>
+<path d="M655,130 C655,105 945,105 945,80" stroke="#38bdf8" stroke-width="1.5" stroke-opacity="0.4" fill="none" class="link link-verdict" style="normal" data-from="r1_0" data-to="r2_0" id="r1_0__r2_0"/>
+<text x="800" y="105" fill="#38bdf8" font-size="9" text-anchor="middle" opacity="0.6" class="edge-label">spec_confirmed</text>
+<path d="M655,130 C655,105 365,105 365,80" stroke="#38bdf8" stroke-width="1.5" stroke-opacity="0.4" fill="none" class="link link-verdict" style="normal" data-from="r1_0" data-to="r0_0" id="r1_0__r0_0"/>
+<text x="510" y="105" fill="#38bdf8" font-size="9" text-anchor="middle" opacity="0.6" class="edge-label">spec_gaps_found x3</text>
+<path d="M945,130 C945,105 1235,105 1235,80" stroke="#38bdf8" stroke-width="1.5" stroke-opacity="0.4" fill="none" class="link link-verdict" style="normal" data-from="r2_0" data-to="r3_0" id="r2_0__r3_0"/>
+<text x="1090" y="105" fill="#38bdf8" font-size="9" text-anchor="middle" opacity="0.6" class="edge-label">confirmed</text>
+<path d="M945,130 C945,105 365,105 365,80" stroke="#38bdf8" stroke-width="1.5" stroke-opacity="0.4" fill="none" class="link link-verdict" style="normal" data-from="r2_0" data-to="r0_0" id="r2_0__r0_0"/>
+<text x="655" y="105" fill="#38bdf8" font-size="9" text-anchor="middle" opacity="0.6" class="edge-label">need_revisions x3</text>
+<path d="M1235,130 C1235,105 1525,105 1525,80" stroke="#38bdf8" stroke-width="1.5" stroke-opacity="0.4" fill="none" class="link link-verdict" style="normal" data-from="r3_0" data-to="r4_0" id="r3_0__r4_0"/>
+<text x="1380" y="105" fill="#38bdf8" font-size="9" text-anchor="middle" opacity="0.6" class="edge-label">implementation_done</text>
+<text x="1525" y="148" fill="#fbbf24" font-size="12" text-anchor="middle" class="end-mark">🏁 passed</text>
+<path d="M1525,130 C1525,105 1235,105 1235,80" stroke="#f87171" stroke-width="2" stroke-opacity="0.4" fill="none" class="link link-verdict" style="back" data-from="r4_0" data-to="r3_0" id="r4_0__r3_0"/>
+<text x="1380" y="105" fill="#f87171" font-size="9" text-anchor="middle" opacity="0.6" class="edge-label">impl_defects x3</text>
+<path d="M1910,103 C1240,103 1240,105 570,105" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-input" data-cat="workspace" data-file="ws_outputs/功能规格书.md_1" data-role="r1_0" id="ws_outputs/功能规格书.md_1__r1_0"/>
+<path d="M1910,103 C1385,103 1385,105 860,105" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-input" data-cat="workspace" data-file="ws_outputs/功能规格书.md_1" data-role="r2_0" id="ws_outputs/功能规格书.md_1__r2_0"/>
+<path d="M1910,103 C1530,103 1530,105 1150,105" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-input" data-cat="workspace" data-file="ws_outputs/功能规格书.md_1" data-role="r3_0" id="ws_outputs/功能规格书.md_1__r3_0"/>
+<path d="M1910,103 C1675,103 1675,105 1440,105" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-input" data-cat="workspace" data-file="ws_outputs/功能规格书.md_1" data-role="r4_0" id="ws_outputs/功能规格书.md_1__r4_0"/>
+<path d="M450,105 C1078,105 1078,103 1706,103" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-output" data-file="ws_outputs/功能规格书.md_1" data-role="r0_0" id="r0_0__ws_outputs/功能规格书.md_1"/>
+<path d="M1910,125 C1675,125 1675,105 1440,105" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-input" data-cat="workspace" data-file="ws_outputs/dashboard.html_1" data-role="r4_0" id="ws_outputs/dashboard.html_1__r4_0"/>
+<path d="M1320,105 C1513,105 1513,125 1706,125" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-output" data-file="ws_outputs/dashboard.html_1" data-role="r3_0" id="r3_0__ws_outputs/dashboard.html_1"/>
+<path d="M1030,105 C1376,105 1376,191 1722,191" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-output" data-file="ws_process/outputs/审阅确认书.json_2" data-role="r2_0" id="r2_0__ws_process/outputs/审阅确认书.json_2"/>
+<path d="M1910,213 C1385,213 1385,105 860,105" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-input" data-cat="workspace" data-file="ws_process/outputs/红队审查报告.json_2" data-role="r2_0" id="ws_process/outputs/红队审查报告.json_2__r2_0"/>
+<path d="M740,105 C1231,105 1231,213 1722,213" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-output" data-file="ws_process/outputs/红队审查报告.json_2" data-role="r1_0" id="r1_0__ws_process/outputs/红队审查报告.json_2"/>
+<path d="M1610,105 C1666,105 1666,235 1722,235" stroke="#4ade80" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-output" data-file="ws_process/outputs/网页验收报告.json_2" data-role="r4_0" id="r4_0__ws_process/outputs/网页验收报告.json_2"/>
+<path d="M470,51 C375,51 375,105 280,105" stroke="#fbbf24" stroke-width="1" stroke-opacity="0.12" fill="none" class="link link-input" data-cat="external" data-file="ext_0" data-role="r0_0" id="ext_0__r0_0"/>
+</g>
+<g class="node-role" data-nid="r0_0" data-rn="功能明确者" transform="translate(280,80)">
+<rect width="170" height="50" rx="8" fill="#1a3622" stroke="#4ade80" stroke-width="2"/>
+<text x="85.0" y="20" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="600">🚀 功能明确者</text>
+<text x="85.0" y="38" text-anchor="middle" fill="#64748b" font-size="9">auto</text>
+</g>
+<g class="node-role" data-nid="r1_0" data-rn="功能红队" transform="translate(570,80)">
+<rect width="170" height="50" rx="8" fill="#1a3622" stroke="#4ade80" stroke-width="2"/>
+<text x="85.0" y="20" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="600">🟢 功能红队</text>
+<text x="85.0" y="38" text-anchor="middle" fill="#64748b" font-size="9">auto</text>
+</g>
+<g class="node-role" data-nid="r2_0" data-rn="人工审阅" transform="translate(860,80)">
+<rect width="170" height="50" rx="8" fill="#1e3a5f" stroke="#60a5fa" stroke-width="2"/>
+<text x="85.0" y="20" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="600">🔵 人工审阅</text>
+<text x="85.0" y="38" text-anchor="middle" fill="#64748b" font-size="9">manual</text>
+</g>
+<g class="node-role" data-nid="r3_0" data-rn="功能实现者" transform="translate(1150,80)">
+<rect width="170" height="50" rx="8" fill="#1a3622" stroke="#4ade80" stroke-width="2"/>
+<text x="85.0" y="20" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="600">🟢 功能实现者</text>
+<text x="85.0" y="38" text-anchor="middle" fill="#64748b" font-size="9">auto</text>
+</g>
+<g class="node-role" data-nid="r4_0" data-rn="网页红队" transform="translate(1440,80)">
+<rect width="170" height="50" rx="8" fill="#1a3622" stroke="#4ade80" stroke-width="2"/>
+<text x="85.0" y="20" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="600">🏁 网页红队</text>
+<text x="85.0" y="38" text-anchor="middle" fill="#64748b" font-size="9">auto</text>
+</g>
+<g class="tree-dir" transform="translate(10,70)">
+<text x="0" y="14" fill="#818cf8" font-size="11" opacity="0.6">📁 knowledge</text>
+</g>
+<g class="node-file" data-nid="kn_knowledge/app.yaml结构规范.md_1" data-cat="knowledge" data-path="knowledge/app.yaml结构规范.md" transform="translate(26,92)" opacity="1">
+<rect width="204" height="22" rx="4" fill="rgba(49,46,129,0.4)" stroke="rgba(165,180,252,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#a5b4fc" font-size="10">✅ app.yaml结构规范</text>
+</g>
+<g class="node-file" data-nid="kn_knowledge/功能规格书编写指南.md_1" data-cat="knowledge" data-path="knowledge/功能规格书编写指南.md" transform="translate(26,114)" opacity="1">
+<rect width="204" height="22" rx="4" fill="rgba(49,46,129,0.4)" stroke="rgba(165,180,252,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#a5b4fc" font-size="10">✅ 功能规格书编写指南</text>
+</g>
+<g class="node-file" data-nid="kn_knowledge/死链与孤儿检测规则.md_1" data-cat="knowledge" data-path="knowledge/死链与孤儿检测规则.md" transform="translate(26,136)" opacity="1">
+<rect width="204" height="22" rx="4" fill="rgba(49,46,129,0.4)" stroke="rgba(165,180,252,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#a5b4fc" font-size="10">✅ 死链与孤儿检测规则</text>
+</g>
+<g class="node-file" data-nid="kn_knowledge/看板可视化规范.md_1" data-cat="knowledge" data-path="knowledge/看板可视化规范.md" transform="translate(26,158)" opacity="1">
+<rect width="204" height="22" rx="4" fill="rgba(49,46,129,0.4)" stroke="rgba(165,180,252,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#a5b4fc" font-size="10">✅ 看板可视化规范</text>
+</g>
+<g class="tree-dir" transform="translate(1690,70)">
+<text x="0" y="14" fill="#4ade80" font-size="11" opacity="0.6">📁 outputs</text>
+</g>
+<g class="node-file" data-nid="ws_outputs/功能规格书.md_1" data-cat="workspace" data-path="outputs/功能规格书.md" transform="translate(1706,92)" opacity="0.4">
+<rect width="204" height="22" rx="4" fill="rgba(26,54,34,0.4)" stroke="rgba(74,222,128,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#4ade80" font-size="10">❌ 功能规格书</text>
+</g>
+<g class="node-file" data-nid="ws_outputs/dashboard.html_1" data-cat="workspace" data-path="outputs/dashboard.html" transform="translate(1706,114)" opacity="0.4">
+<rect width="204" height="22" rx="4" fill="rgba(26,54,34,0.4)" stroke="rgba(74,222,128,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#4ade80" font-size="10">❌ 看板程序</text>
+</g>
+<g class="tree-dir" transform="translate(1690,136)">
+<text x="0" y="14" fill="#4ade80" font-size="11" opacity="0.6">📁 process</text>
+</g>
+<g class="tree-dir" transform="translate(1690,158)">
+<text x="0" y="14" fill="#4ade80" font-size="11" opacity="0.6">📁 outputs</text>
+</g>
+<g class="node-file" data-nid="ws_process/outputs/审阅确认书.json_2" data-cat="workspace" data-path="process/outputs/审阅确认书.json" transform="translate(1722,180)" opacity="0.4">
+<rect width="188" height="22" rx="4" fill="rgba(26,54,34,0.4)" stroke="rgba(74,222,128,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#4ade80" font-size="10">❌ 审阅确认书</text>
+</g>
+<g class="node-file" data-nid="ws_process/outputs/红队审查报告.json_2" data-cat="workspace" data-path="process/outputs/红队审查报告.json" transform="translate(1722,202)" opacity="0.4">
+<rect width="188" height="22" rx="4" fill="rgba(26,54,34,0.4)" stroke="rgba(74,222,128,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#4ade80" font-size="10">❌ 红队审查报告</text>
+</g>
+<g class="node-file" data-nid="ws_process/outputs/网页验收报告.json_2" data-cat="workspace" data-path="process/outputs/网页验收报告.json" transform="translate(1722,224)" opacity="0.4">
+<rect width="188" height="22" rx="4" fill="rgba(26,54,34,0.4)" stroke="rgba(74,222,128,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#4ade80" font-size="10">❌ 验收报告</text>
+</g>
+<g class="node-file" data-nid="ext_0" data-cat="external" data-path="00-需求描述.md" transform="translate(280,40)">
+<rect width="190" height="22" rx="4" fill="rgba(59,42,14,0.4)" stroke="rgba(251,191,36,0.3)" stroke-width="0.5"/>
+<text x="4" y="15" fill="#fbbf24" font-size="10">✅ 需求描述</text>
+</g>
+</svg>
+</div></div>
+<div id="tt"></div>
+<script>
+const R={"r0_0": {"name": "功能明确者", "confirm": "auto", "skill": "roles/功能明确者/skill.md", "skill_exists": true, "verdicts": ["spec_ready"], "inputs": [{"name": "需求描述", "path": "00-需求描述.md", "exists": true, "cat": "external"}], "outputs": [{"name": "功能规格书", "path": "outputs/功能规格书.md", "exists": false, "cat": "workspace"}], "knowledge": [], "out_edges": [{"v": "spec_ready", "t": "功能红队", "max": null, "c": 0}], "in_edges": [{"f": "功能明确者", "v": "spec_ready"}], "input_files": ["00-需求描述.md"], "output_files": ["outputs/功能规格书.md"], "kn_paths": []}, "r1_0": {"name": "功能红队", "confirm": "auto", "skill": "roles/功能红队/skill.md", "skill_exists": true, "verdicts": ["spec_confirmed", "spec_gaps_found"], "inputs": [{"name": "功能规格书", "path": "outputs/功能规格书.md", "exists": false, "cat": "workspace"}], "outputs": [{"name": "红队审查报告", "path": "process/outputs/红队审查报告.json", "exists": false, "cat": "workspace"}], "knowledge": [], "out_edges": [{"v": "spec_confirmed", "t": "人工审阅", "max": null, "c": 0}, {"v": "spec_gaps_found", "t": "功能明确者", "max": 3, "c": 1}], "in_edges": [{"f": "功能红队", "v": "spec_confirmed"}, {"f": "功能红队", "v": "spec_gaps_found"}], "input_files": ["outputs/功能规格书.md"], "output_files": ["process/outputs/红队审查报告.json"], "kn_paths": []}, "r2_0": {"name": "人工审阅", "confirm": "manual", "skill": "roles/人工审阅/skill.md", "skill_exists": true, "verdicts": ["confirmed", "need_revisions"], "inputs": [{"name": "功能规格书", "path": "outputs/功能规格书.md", "exists": false, "cat": "workspace"}, {"name": "红队审查报告", "path": "process/outputs/红队审查报告.json", "exists": false, "cat": "workspace"}], "outputs": [{"name": "审阅确认书", "path": "process/outputs/审阅确认书.json", "exists": false, "cat": "workspace"}], "knowledge": [], "out_edges": [{"v": "confirmed", "t": "功能实现者", "max": null, "c": 0}, {"v": "need_revisions", "t": "功能明确者", "max": 3, "c": 1}], "in_edges": [{"f": "人工审阅", "v": "confirmed"}, {"f": "人工审阅", "v": "need_revisions"}], "input_files": ["outputs/功能规格书.md", "process/outputs/红队审查报告.json"], "output_files": ["process/outputs/审阅确认书.json"], "kn_paths": []}, "r3_0": {"name": "功能实现者", "confirm": "auto", "skill": "roles/功能实现者/skill.md", "skill_exists": true, "verdicts": ["implementation_done"], "inputs": [{"name": "功能规格书", "path": "outputs/功能规格书.md", "exists": false, "cat": "workspace"}], "outputs": [{"name": "看板程序", "path": "outputs/dashboard.html", "exists": false, "cat": "workspace"}], "knowledge": [], "out_edges": [{"v": "implementation_done", "t": "网页红队", "max": null, "c": 0}], "in_edges": [{"f": "功能实现者", "v": "implementation_done"}], "input_files": ["outputs/功能规格书.md"], "output_files": ["outputs/dashboard.html"], "kn_paths": []}, "r4_0": {"name": "网页红队", "confirm": "auto", "skill": "roles/网页红队/skill.md", "skill_exists": true, "verdicts": ["impl_defects", "passed"], "inputs": [{"name": "功能规格书", "path": "outputs/功能规格书.md", "exists": false, "cat": "workspace"}, {"name": "看板程序", "path": "outputs/dashboard.html", "exists": false, "cat": "workspace"}], "outputs": [{"name": "验收报告", "path": "process/outputs/网页验收报告.json", "exists": false, "cat": "workspace"}], "knowledge": [], "out_edges": [{"v": "passed", "t": "完成", "max": null, "c": 0}, {"v": "impl_defects", "t": "功能实现者", "max": 3, "c": 1}], "in_edges": [{"f": "网页红队", "v": "passed"}, {"f": "网页红队", "v": "impl_defects"}], "input_files": ["outputs/功能规格书.md", "outputs/dashboard.html"], "output_files": ["process/outputs/网页验收报告.json"], "kn_paths": []}},F={"kn_knowledge/app.yaml结构规范.md_1": {"name": "app.yaml结构规范", "path": "knowledge/app.yaml结构规范.md", "cat": "knowledge", "exists": true, "producers": [], "consumers": []}, "kn_knowledge/功能规格书编写指南.md_1": {"name": "功能规格书编写指南", "path": "knowledge/功能规格书编写指南.md", "cat": "knowledge", "exists": true, "producers": [], "consumers": []}, "kn_knowledge/死链与孤儿检测规则.md_1": {"name": "死链与孤儿检测规则", "path": "knowledge/死链与孤儿检测规则.md", "cat": "knowledge", "exists": true, "producers": [], "consumers": []}, "kn_knowledge/看板可视化规范.md_1": {"name": "看板可视化规范", "path": "knowledge/看板可视化规范.md", "cat": "knowledge", "exists": true, "producers": [], "consumers": []}, "ws_outputs/功能规格书.md_1": {"name": "功能规格书", "path": "outputs/功能规格书.md", "cat": "workspace", "exists": false, "producers": ["功能明确者"], "consumers": ["功能红队", "人工审阅", "功能实现者", "网页红队"]}, "ws_outputs/dashboard.html_1": {"name": "看板程序", "path": "outputs/dashboard.html", "cat": "workspace", "exists": false, "producers": ["功能实现者"], "consumers": ["网页红队"]}, "ws_process/outputs/审阅确认书.json_2": {"name": "审阅确认书", "path": "process/outputs/审阅确认书.json", "cat": "workspace", "exists": false, "producers": ["人工审阅"], "consumers": []}, "ws_process/outputs/红队审查报告.json_2": {"name": "红队审查报告", "path": "process/outputs/红队审查报告.json", "cat": "workspace", "exists": false, "producers": ["功能红队"], "consumers": ["人工审阅"]}, "ws_process/outputs/网页验收报告.json_2": {"name": "验收报告", "path": "process/outputs/网页验收报告.json", "cat": "workspace", "exists": false, "producers": ["网页红队"], "consumers": []}, "ext_0": {"name": "需求描述", "path": "00-需求描述.md", "cat": "external", "exists": true, "producers": [], "consumers": ["功能明确者"]}};
+var z=1,px=0,py=0,dr=false,sx,sy;
+function at(){document.getElementById('svgc').style.transform='translate('+px+'px,'+py+'px) scale('+z+')';document.getElementById('zv').textContent=Math.round(z*100)+'%';}
+function zb(d){z=Math.max(0.15,Math.min(3,z+d));at();}
+function rv(){z=1;px=0;py=0;at();}
+var cw=document.getElementById('cwrap');
+cw.addEventListener('wheel',function(e){e.preventDefault();zb(e.deltaY>0?-0.08:0.08);});
+cw.addEventListener('mousedown',function(e){if(e.target.closest('.node-role')||e.target.closest('.node-file'))return;dr=true;sx=e.clientX-px;sy=e.clientY-py;cw.style.cursor='grabbing';});
+document.addEventListener('mousemove',function(e){if(!dr)return;px=e.clientX-sx;py=e.clientY-sy;at();});
+document.addEventListener('mouseup',function(){dr=false;cw.style.cursor='';});
+
+function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+function showTT(h,e){var t=document.getElementById('tt');t.innerHTML=h;t.style.display='block';pt(e);}
+function pt(e){var t=document.getElementById('tt');var x=e.clientX+12,y=e.clientY+12;var tw=t.offsetWidth,th=t.offsetHeight;if(x+tw>innerWidth-8)x=e.clientX-tw-12;if(y+th>innerHeight-8)y=innerHeight-th-8;if(y<46)y=46;t.style.left=x+'px';t.style.top=y+'px';}
+function hideTT(){document.getElementById('tt').style.display='none';}
+
+// ═══ 悬停角色：高亮动画 ═══
+function highlightRole(nid){
+  var d=R[nid];if(!d)return;
+  // dim everything
+  document.querySelectorAll('.node-role,.node-file,.tree-dir').forEach(function(el){el.classList.add('node-dim');});
+  // highlight this role
+  var roleEl=document.querySelector('[data-nid="'+nid+'"]');
+  if(roleEl)roleEl.classList.remove('node-dim');
+
+  // highlight input files + green links
+  d.input_files.forEach(function(path){
+    var fid=findFileNid(path);if(!fid)return;
+    var fel=document.querySelector('[data-nid="'+fid+'"]');
+    if(fel){fel.classList.remove('node-dim');fel.classList.add('node-highlight');}
+    var link=document.getElementById(fid+'__'+nid);
+    if(link)link.classList.add('link-active-green');
+  });
+
+  // highlight knowledge + purple links
+  d.kn_paths.forEach(function(path){
+    var fid=findFileNid(path);if(!fid)return;
+    var fel=document.querySelector('[data-nid="'+fid+'"]');
+    if(fel){fel.classList.remove('node-dim');fel.classList.add('node-highlight');}
+    var link=document.getElementById(fid+'__'+nid);
+    if(link)link.classList.add('link-active-kn');
+  });
+
+  // highlight output files + red links
+  d.output_files.forEach(function(path){
+    var fid=findFileNid(path);if(!fid)return;
+    var fel=document.querySelector('[data-nid="'+fid+'"]');
+    if(fel){fel.classList.remove('node-dim');fel.classList.add('node-highlight');}
+    var link=document.getElementById(nid+'__'+fid);
+    if(link)link.classList.add('link-active-red');
+  });
+
+  // highlight verdict links from this role
+  document.querySelectorAll('.link-verdict[data-from="'+nid+'"]').forEach(function(el){
+    el.classList.remove('link-dim');
+    el.style.strokeOpacity='0.8';
+    var to=el.getAttribute('data-to');
+    var tgt=document.querySelector('[data-nid="'+to+'"]');
+    if(tgt)tgt.classList.remove('node-dim');
+  });
+  // verdict links to this role
+  document.querySelectorAll('.link-verdict[data-to="'+nid+'"]').forEach(function(el){
+    el.classList.remove('link-dim');
+    el.style.strokeOpacity='0.8';
+    var from=el.getAttribute('data-from');
+    var src=document.querySelector('[data-nid="'+from+'"]');
+    if(src)src.classList.remove('node-dim');
+  });
+}
+
+function clearHighlight(){
+  document.querySelectorAll('.node-dim').forEach(function(el){el.classList.remove('node-dim');});
+  document.querySelectorAll('.node-highlight').forEach(function(el){el.classList.remove('node-highlight');});
+  document.querySelectorAll('.link-active-green,.link-active-kn,.link-active-red').forEach(function(el){el.classList.remove('link-active-green','link-active-kn','link-active-red');});
+  document.querySelectorAll('.link-verdict').forEach(function(el){el.style.strokeOpacity='';});
+}
+
+function findFileNid(path){
+  var el=document.querySelector('[data-path="'+CSS.escape(path)+'"]');
+  return el?el.getAttribute('data-nid'):null;
+}
+
+function roleTT(nid,e){
+  var d=R[nid];if(!d)return;
+  var h='<div class="th">'+esc(d.name)+'</div><div class="tb">';
+  h+='<div class="ts"><h4>&#9881; Skill</h4><div class="tr"><span class="fp">'+(d.skill_exists?'&#9989;':'&#10060;')+' '+esc(d.skill)+'</span></div></div>';
+  if(d.knowledge.length){h+='<div class="ts"><h4>&#128218; Knowledge ('+d.knowledge.length+')</h4>';d.knowledge.forEach(function(k){h+='<div class="tr"><span class="fn cat-kn">'+(k.exists?'&#9989;':'&#10060;')+' '+esc(k.name)+'</span><span class="fp">'+esc(k.path)+'</span></div>';});h+='</div>';}
+  if(d.inputs.length){h+='<div class="ts"><h4>&#128229; Inputs ('+d.inputs.length+')</h4>';d.inputs.forEach(function(i){var c=i.cat==='knowledge'?'cat-kn':i.cat==='workspace'?'cat-ws':'cat-ext';h+='<div class="tr"><span class="fn '+c+'">'+(i.exists?'&#9989;':'&#10060;')+' '+esc(i.name)+'</span><span class="fp">'+esc(i.path)+'</span></div>';});h+='</div>';}
+  if(d.outputs.length){h+='<div class="ts"><h4>&#128226; Outputs ('+d.outputs.length+')</h4>';d.outputs.forEach(function(o){var c=o.cat==='knowledge'?'cat-kn':o.cat==='workspace'?'cat-ws':'cat-ext';h+='<div class="tr"><span class="fn '+c+'">'+(o.exists?'&#9989;':'&#10060;')+' '+esc(o.name)+'</span><span class="fp">'+esc(o.path)+'</span></div>';});h+='</div>';}
+  if(d.verdicts.length){h+='<div class="ts"><h4>&#9878; Verdict</h4>';d.verdicts.forEach(function(v){h+='<span class="vt">'+esc(v)+'</span>';});h+='</div>';}
+  if(d.out_edges.length){h+='<div class="ts"><h4>&#128279; Out</h4>';d.out_edges.forEach(function(e){var ex='';if(e.max)ex+=' x'+e.max;if(e.c)ex+=' +'+e.c;h+='<div class="er"><span class="ev">'+esc(e.v)+'</span> &#8594; <span class="et">'+esc(e.t)+'</span><span style="color:#475569">'+ex+'</span></div>';});h+='</div>';}
+  h+='</div>';
+  showTT(h,e);
+}
+
+function fileTT(nid,e){
+  var d=F[nid];if(!d)return;
+  var cl={knowledge:['cat-kn','#a5b4fc','Knowledge'],workspace:['cat-ws','#4ade80','Workspace'],external:['cat-ext','#fbbf24','External']}[d.cat];
+  var m=d.exists?'&#9989;':'&#10060;';
+  var h='<div class="th" style="color:'+cl[1]+'">'+m+' '+esc(d.name)+'</div><div class="tb">';
+  h+='<div class="ts"><h4>Path</h4><div class="tr"><span class="fp">'+esc(d.path)+'</span></div></div>';
+  h+='<div class="ts"><h4>Type</h4><div class="tr"><span class="'+cl[0]+'">'+cl[2]+'</span></div></div>';
+  if(d.producers.length){h+='<div class="ts"><h4>&#9999; &#30001;&#35841;&#29983;&#20135;</h4>';d.producers.forEach(function(p){h+='<div class="er"><span class="et">'+esc(p)+'</span></div>';});h+='</div>';}
+  if(d.consumers.length){h+='<div class="ts"><h4>&#128064; &#34987;&#35841;&#35835;&#21462;</h4>';d.consumers.forEach(function(c){h+='<div class="er"><span class="et">'+esc(c)+'</span></div>';});h+='</div>';}
+  h+='</div>';
+  showTT(h,e);
+}
+
+// bind events
+setTimeout(function(){
+  document.querySelectorAll('.node-role').forEach(function(el){
+    var nid=el.getAttribute('data-nid');
+    el.addEventListener('mouseenter',function(e){clearHighlight();highlightRole(nid);roleTT(nid,e);});
+    el.addEventListener('mousemove',pt);
+    el.addEventListener('mouseleave',function(){clearHighlight();hideTT();});
+  });
+  document.querySelectorAll('.node-file').forEach(function(el){
+    var nid=el.getAttribute('data-nid');
+    el.addEventListener('mouseenter',function(e){fileTT(nid,e);});
+    el.addEventListener('mousemove',pt);
+    el.addEventListener('mouseleave',hideTT);
+  });
+},200);
+</script>
+</body></html>

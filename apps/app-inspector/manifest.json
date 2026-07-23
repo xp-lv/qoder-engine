@@ -1,0 +1,34 @@
+{
+  "schema_version": "2.0",
+  "app_name": "app-inspector",
+  "paths": {
+    "router": "ROUTER.json",
+    "registry": "registry.json"
+  },
+  "workspace_template": {
+    "dirs": [
+      "knowledge",
+      "outputs",
+      "process/outputs"
+    ],
+    "init_files": {},
+    "knowledge_sources": [
+      {
+        "from": "knowledge/app.yaml结构规范.md",
+        "to": "knowledge/app.yaml结构规范.md"
+      },
+      {
+        "from": "knowledge/死链与孤儿检测规则.md",
+        "to": "knowledge/死链与孤儿检测规则.md"
+      },
+      {
+        "from": "knowledge/看板可视化规范.md",
+        "to": "knowledge/看板可视化规范.md"
+      },
+      {
+        "from": "knowledge/功能规格书编写指南.md",
+        "to": "knowledge/功能规格书编写指南.md"
+      }
+    ]
+  }
+}

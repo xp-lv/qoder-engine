@@ -1,0 +1,175 @@
+{
+  "schema_version": "2.0",
+  "entry": "功能明确者",
+  "steps": [
+    {
+      "step": "功能明确者",
+      "role": "功能明确者",
+      "transitions": {
+        "spec_ready": {
+          "targets": [
+            "功能红队"
+          ],
+          "type": "normal"
+        },
+        "fail": {
+          "targets": [
+            "功能明确者"
+          ],
+          "type": "backward",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "outputs/功能规格书.md"
+            },
+            {
+              "path": "outputs/功能明确者-gate-result.json"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "功能红队",
+      "role": "功能红队",
+      "transitions": {
+        "spec_confirmed": {
+          "targets": [
+            "人工审阅"
+          ],
+          "type": "normal"
+        },
+        "spec_gaps_found": {
+          "targets": [
+            "功能明确者"
+          ],
+          "type": "normal",
+          "carries": [
+            {
+              "path": "process/outputs/红队审查报告.json"
+            }
+          ]
+        },
+        "fail": {
+          "targets": [
+            "功能红队"
+          ],
+          "type": "backward",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "process/outputs/红队审查报告.json"
+            },
+            {
+              "path": "outputs/功能红队-gate-result.json"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "人工审阅",
+      "role": "人工审阅",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "功能实现者"
+          ],
+          "type": "normal"
+        },
+        "need_revisions": {
+          "targets": [
+            "功能明确者"
+          ],
+          "type": "normal",
+          "carries": [
+            {
+              "path": "process/outputs/审阅确认书.json"
+            }
+          ]
+        },
+        "fail": {
+          "targets": [
+            "人工审阅"
+          ],
+          "type": "backward",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "process/outputs/审阅确认书.json"
+            },
+            {
+              "path": "outputs/人工审阅-gate-result.json"
+            },
+            {
+              "path": "outputs/人工审阅-feedback.json"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "功能实现者",
+      "role": "功能实现者",
+      "transitions": {
+        "implementation_done": {
+          "targets": [
+            "网页红队"
+          ],
+          "type": "normal"
+        },
+        "fail": {
+          "targets": [
+            "功能实现者"
+          ],
+          "type": "backward",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "outputs/dashboard.html"
+            },
+            {
+              "path": "outputs/功能实现者-gate-result.json"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "网页红队",
+      "role": "网页红队",
+      "transitions": {
+        "passed": {
+          "targets": [],
+          "type": "normal"
+        },
+        "impl_defects": {
+          "targets": [
+            "功能实现者"
+          ],
+          "type": "normal",
+          "carries": [
+            {
+              "path": "process/outputs/网页验收报告.json"
+            }
+          ]
+        },
+        "fail": {
+          "targets": [
+            "网页红队"
+          ],
+          "type": "backward",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "process/outputs/网页验收报告.json"
+            },
+            {
+              "path": "outputs/网页红队-gate-result.json"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

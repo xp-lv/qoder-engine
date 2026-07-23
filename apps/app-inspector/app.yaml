@@ -1,0 +1,87 @@
+app_name: app-inspector
+
+# APP 定位：用对抗式多角色协作，产出 app.yaml 可视化看板程序
+# 流程：功能明确者 → 功能红队 → 人工审阅 → 功能实现者 → 网页红队
+# 两条对抗闭环：
+#   功能层：红队挑战"规格书够不够让人看懂 app" → 回退功能明确者
+#   实现层：网页红队截图验收"实现符不符合规格书" → 回退功能实现者
+
+knowledge:
+  - app.yaml结构规范: knowledge/app.yaml结构规范.md
+    inject_to: [功能明确者, 功能红队]
+  - 死链与孤儿检测规则: knowledge/死链与孤儿检测规则.md
+    inject_to: [功能明确者, 功能红队]
+  - 看板可视化规范: knowledge/看板可视化规范.md
+    inject_to: [功能明确者, 功能红队, 人工审阅, 功能实现者]
+  - 功能规格书编写指南: knowledge/功能规格书编写指南.md
+    inject_to: [功能明确者, 功能红队]
+
+roles:
+  # ═══ 第一层：功能明确（入口）═══
+
+  功能明确者:
+    confirm: auto
+    inputs:
+      - 需求描述: 00-需求描述.md
+    outputs:
+      - 功能规格书: outputs/功能规格书.md
+
+  # ═══ 第二层：功能红队（对抗）═══
+
+  功能红队:
+    confirm: auto
+    inputs:
+      - 功能规格书: outputs/功能规格书.md
+    outputs:
+      - 红队审查报告: process/outputs/红队审查报告.json
+
+  # ═══ 第三层：人工审阅（manual 确认）═══
+
+  人工审阅:
+    confirm: manual
+    inputs:
+      - 功能规格书: outputs/功能规格书.md
+      - 红队审查报告: process/outputs/红队审查报告.json
+    outputs:
+      - 审阅确认书: process/outputs/审阅确认书.json
+
+  # ═══ 第四层：功能实现 ═══
+
+  功能实现者:
+    confirm: auto
+    inputs:
+      - 功能规格书: outputs/功能规格书.md
+    outputs:
+      - 看板程序: outputs/dashboard.html
+
+  # ═══ 第五层：网页红队（截图验收）═══
+
+  网页红队:
+    confirm: auto
+    inputs:
+      - 功能规格书: outputs/功能规格书.md
+      - 看板程序: outputs/dashboard.html
+    outputs:
+      - 验收报告: process/outputs/网页验收报告.json
+
+edges:
+  # 功能明确者 → 功能红队
+  - 功能明确者 → 功能红队 when: result.verdict == "spec_ready"
+
+  # 功能红队路由
+  - 功能红队 → 人工审阅 when: result.verdict == "spec_confirmed"
+  - 功能红队 → 功能明确者 when: result.verdict == "spec_gaps_found"
+    carries: [process/outputs/红队审查报告.json]
+
+  # 人工审阅路由
+  - 人工审阅 → 功能实现者 when: result.verdict == "confirmed"
+  - 人工审阅 → 功能明确者 when: result.verdict == "need_revisions"
+    carries: [process/outputs/审阅确认书.json]
+
+  # 功能实现者 → 网页红队
+  - 功能实现者 → 网页红队 when: result.verdict == "implementation_done"
+
+  # 网页红队路由
+  - 网页红队 → 完成 when: result.verdict == "passed"
+  - 网页红队 → 功能实现者 when: result.verdict == "impl_defects"
+    carries: [process/outputs/网页验收报告.json]
