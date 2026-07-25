@@ -406,11 +406,7 @@ def _check_envelope(step, envelope, state_path, app_path, failed, gate_results):
     env_verdict = env_result.get("verdict", "ENVELOPE_FAIL") if ok_env else "ENVELOPE_FAIL"
     if env_verdict == "ENVELOPE_FAIL":
         env_errors = env_result.get("errors", ["信封校验失败(无具体错误)"])
-        failed.append({
-            "step": step,
-            "reason": "envelope_violation",
-            "error": "; ".join(env_errors),
-        })
+        # v8.5: 信封失败不再 BLOCKING，统一走 fail 边自动重试
         gate_results.append({
             "step": step,
             "output_path": "<envelope>",
@@ -524,7 +520,13 @@ def _process_result_entry(r, router_steps, reg_map, step_role_map, state_path, a
     _role = step_role_map.get(step, "")
 
     # Phase 0: 信封校验
-    if not _check_envelope(step, envelope, state_path, app_path, failed, gate_results):
+    envelope_ok = _check_envelope(step, envelope, state_path, app_path, failed, gate_results)
+    if not envelope_ok:
+        # v8.5: 信封失败也走 fail 边（不再 BLOCKING，统一自动重试）
+        env_entry = gate_results[-1]  # _check_envelope 刚追加的信封结果
+        _decide_advance_or_set(step, _role, role_verdict, [env_entry], False,
+                               router_steps, reg_map, state_path,
+                               pending, auto_confirmed, failed)
         return
 
     # Phase A: Gate 文件校验

@@ -3,7 +3,7 @@
 
 Layer 0: 协议信封校验（--mode envelope）
   校验 role-executor 返回值的格式契约（step/verdict/status/outputs）。
-  失败 → ENVELOPE_FAIL → BLOCKING（协议违规，不走 fail 边）。
+  失败 → ENVELOPE_FAIL → 统一走 fail 边自动重试（v8.5: 不再 BLOCKING）。
   verdict 合法性权威源：ROUTER.json 的 transitions keys。
 
 Layer 1: 产出物文件校验（--mode file，默认）
@@ -94,7 +94,7 @@ def validate_envelope(envelope, step_def):
     """Gate Layer 0: 协议信封校验。
 
     校验 role-executor 返回值的格式契约。
-    失败 → ENVELOPE_FAIL（BLOCKING，不走 fail 边）。
+    失败 → ENVELOPE_FAIL（v8.5: 统一走 fail 边自动重试，不再 BLOCKING）。
 
     权威源：ROUTER.json 的 transitions keys（天然包含所有合法 verdict）。
     """
@@ -178,7 +178,7 @@ def validate_deliverable_contract(file_path, raw_content, contract):
 
 def _run_envelope_mode(args, step_def):
     """Layer 0: 协议信封校验（--mode envelope）。
-    失败 → ENVELOPE_FAIL → BLOCKING（不走 fail 边）。
+    失败 → ENVELOPE_FAIL（v8.5: 统一走 fail 边，不再 BLOCKING）。
     """
     if not args.envelope:
         output({"verdict": "ENVELOPE_FAIL", "errors": ["--mode envelope 需要 --envelope 参数"]})
