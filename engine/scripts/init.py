@@ -9,10 +9,7 @@ from session_path import (
     derive_ws_id, get_app_name, get_edge_targets, resolve_workspace_output,
 )
 from state_io import save_state
-from datetime import datetime, timezone
-
-def now_iso():
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+from engine_common import now_iso, output, load_json_or_exit
 
 def output_success(message, state=None, registry=None, router=None):
     result = {"status": "success", "error_code": None, "message": message}
@@ -22,12 +19,10 @@ def output_success(message, state=None, registry=None, router=None):
             "total_steps": len(router.get("steps", [])) if router else 0,
             "roles_registered": [r["role_name"] for r in registry] if registry else []
         }
-    print(json.dumps(result, ensure_ascii=False))
-    sys.exit(0)
+    output(result)
 
 def output_failure(error_code, message):
-    print(json.dumps({"status": "failure", "error_code": error_code, "message": message, "state_snapshot": None}, ensure_ascii=False))
-    sys.exit(1)
+    output({"status": "failure", "error_code": error_code, "message": message, "state_snapshot": None})
 
 def check_dependencies():
     try:
@@ -35,15 +30,6 @@ def check_dependencies():
     except ImportError:
         output_failure("OIC-E506",
             "缺少依赖 jsonschema。请安装: pip install jsonschema")
-
-def load_json(path, error_code, missing_msg):
-    if not os.path.exists(path):
-        output_failure(error_code, f"{missing_msg}: {path}")
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, ValueError) as e:
-        output_failure(error_code, f"JSON 解析失败: {e}")
 
 def validate_registry(registry):
     if not isinstance(registry, list):
@@ -119,11 +105,11 @@ def main():
         check_dependencies()
 
     # Step 1-2: 校验 registry.json
-    registry = load_json(f"{app_path}/registry.json", "OIC-E501", "注册表不存在")
+    registry = load_json_or_exit(f"{app_path}/registry.json", "OIC-E501", "注册表不存在", extra_fields={"state_snapshot": None})
     validate_registry(registry)
 
     # Step 3: 校验 ROUTER.json
-    router = load_json(f"{app_path}/ROUTER.json", "OIC-E511", "路由表不存在")
+    router = load_json_or_exit(f"{app_path}/ROUTER.json", "OIC-E511", "路由表不存在", extra_fields={"state_snapshot": None})
 
     # SDK 兼容性检查
     _sdk_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "sdk")
@@ -167,7 +153,6 @@ def main():
     with open(ws_root_f, "w") as f:
         f.write(os.path.abspath(args.workspace_path))
 
-    # v9.2: 删除 process 目录创建（process 机制已废弃）
 
     # 创建产出物目录（v9.2: 删除 type 路由，统一解析）
     # 同时处理 path（相对）和 abs_path（绝对）
@@ -248,7 +233,6 @@ def main():
 
     save_state(state_path, initial_state)
 
-    # v7.2: 注册到工作区索引
     try:
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         from workspace_index import register

@@ -1,8 +1,10 @@
 ---
 name: role-executor
 description: 功能层执行器。读运行数据+SKILL.md，执行角色逻辑，写产出物，返回 JSON。不调任何脚本。
-tools: Read, Write, SearchReplace, Grep, Glob, Bash
-model: "[GLM-5.2](custom:model_1782455723498_1dgvgk5)"
+tools: Read, Write, SearchReplace, Grep, Glob, Bash, browser-use
+model: "[GLM-5.2](custom:model_1782649354335_c4g9ma3)"
+mcpServers:
+  - playwright
 ---
 
 # Role Executor

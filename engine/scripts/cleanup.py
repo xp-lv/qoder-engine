@@ -13,6 +13,10 @@ import argparse
 import json
 import os
 import shutil
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__))))
+from session_path import read_workspace_root
 
 WORKSPACES_DIR = os.path.join("runtime", "workspaces")
 
@@ -44,10 +48,7 @@ def main():
         ws_root_f = os.path.join(ws_dir, "WORKSPACE_ROOT")
 
         # 读 WORKSPACE_ROOT
-        ws_root = ""
-        if os.path.exists(ws_root_f):
-            with open(ws_root_f) as f:
-                ws_root = f.read().strip()
+        ws_root = read_workspace_root(ws_id) or ""
 
         # 读 STATE.json
         terminal = None

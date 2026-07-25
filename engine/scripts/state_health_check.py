@@ -17,25 +17,13 @@ Usage:
   python3 state_health_check.py --state-path <path> --router-path <path> [--dry-run] [--fix]
 """
 import argparse, json, os, sys
-from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from session_path import resolve_ws_state, resolve_app_path
+from engine_common import now_iso, load_json_safe as load_json
 from state_invariants import (
     Violation, validate_all, build_join_map,
 )
-
-
-def now_iso():
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def load_json(path):
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return None
 
 
 def build_router_index(router_data):
@@ -121,7 +109,6 @@ def _z3_broken_join_detection(state, router_idx, join_idx):
 
         in_pending_routes = any(s in pending_routes for s in satisfied_sources)
 
-        # v8.0 修复 P1-4：cached_branch_results 屏蔽全量改按 target 维度判断。
         # 原实现：not cached_branch_results（只要缓存非空就跳过所有检测）。
         # 问题：并行场景下，分支 A 的 cached_branch_results 不应屏蔽分支 B 的断裂检测。
         # 修复：检查该 target 的 sources 是否在 cached_branch_results 内。
@@ -198,17 +185,18 @@ def main():
         print(json.dumps({"status": "error", "error": f"STATE.json 不存在: {state_path}"}))
         sys.exit(1)
 
+    st = load_json(state_path)
     if args.router_path:
         router_path = args.router_path
         registry_path = args.router_path.replace("ROUTER.json", "registry.json")
     else:
         if not ws_id:
-            ws_id = load_json(state_path).get("workspace_id", "default") if load_json(state_path) else "default"
+            ws_id = st.get("workspace_id", "default") if st else "default"
         app_path = resolve_app_path(ws_id)
         router_path = os.path.join(app_path, "ROUTER.json")
         registry_path = os.path.join(app_path, "registry.json")
 
-    state = load_json(state_path)
+    state = st
     router_data = load_json(router_path)
     registry_data = load_json(registry_path)
 

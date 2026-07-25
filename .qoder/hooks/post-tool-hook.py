@@ -17,6 +17,7 @@ sys.path.insert(0, _ENGINE_SCRIPTS)
 
 from session_path import resolve_ws_state, resolve_app_path, resolve_ws_base, read_workspace_root
 from state_io import load_state, save_state, state_txn
+from engine_common import load_json_safe as load_json_file
 
 # 项目根目录
 _PROJECT_ROOT = os.path.normpath(os.path.join(_HOOK_DIR, "..", ".."))
@@ -46,15 +47,6 @@ def generate_timebased_ws_id(app_path):
     return ws_id
 
 
-def load_json_file(path):
-    """安全加载 JSON 文件。"""
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return None
-
-
 def emit(text):
     """统一注入入口。自动补全【主Agent指令】前缀，确保每条消息都形成闭环。"""
     if not text.startswith("【主Agent指令】"):
@@ -69,12 +61,16 @@ def emit(text):
     sys.exit(0)
 
 
+# 可配置超时（环境变量 STATE_OP_TIMEOUT 控制子进程超时）
+_SUBPROCESS_TIMEOUT = int(os.environ.get("STATE_OP_TIMEOUT", "30"))
+
+
 def run_script(args):
     """执行引擎脚本，返回 JSON 结果。失败时返回带 _error 字段的 dict。"""
     try:
         r = subprocess.run(
             ["python3"] + args,
-            capture_output=True, text=True, timeout=30
+            capture_output=True, text=True, timeout=_SUBPROCESS_TIMEOUT
         )
         if r.returncode != 0:
             # 非零退出：尝试解析 stdout（引擎错误也输出 JSON），回退到 stderr
@@ -140,13 +136,10 @@ def format_directive(step_result):
         # 从 STATE.json 读取产物路径，展示给用户
         artifact_lines = []
         try:
+            _ws_id = step_result.get("workspace_id", "")
+            state_path = resolve_ws_state(_ws_id) if _ws_id else ""
             state = load_json_file(state_path) or {}
-            ws_base = os.path.dirname(state_path)
-            wr_file = os.path.join(ws_base, "WORKSPACE_ROOT")
-            ws_root = ""
-            if os.path.exists(wr_file):
-                with open(wr_file, "r") as f:
-                    ws_root = f.read().strip()
+            ws_root = read_workspace_root(_ws_id) if _ws_id else ""
             active_dispatches = state.get("active_dispatches", {})
             for step_name, dispatch in active_dispatches.items():
                 # 只展示 awaiting_confirmation 的步骤的产物
@@ -316,12 +309,9 @@ def handle_analyzer_return(tool_output, workspace_id):
                     decisions.append({"step": s, "decision": user_decision})
             # fail 时把用户反馈写入固定文件载体
             if user_decision == "fail" and user_feedback and decisions:
-                ws_base = os.path.dirname(state_path)
-                ws_root = ws_base
-                wr_file = os.path.join(ws_base, "WORKSPACE_ROOT")
-                if os.path.exists(wr_file):
-                    with open(wr_file, "r") as f:
-                        ws_root = f.read().strip()
+                ws_root = read_workspace_root(sid)
+                if not ws_root:
+                    ws_root = os.path.dirname(state_path)
                 for d in decisions:
                     fb_file = os.path.join(ws_root, "outputs", f"{d['step']}-feedback.json")
                     os.makedirs(os.path.dirname(fb_file), exist_ok=True)
@@ -428,12 +418,18 @@ def _collect_all_gate_errors(results):
 
 
 def _hook2_log(msg):
-    """Hook② role-executor 路径专用日志。"""
+    """Hook② role-executor 路径专用日志。
+
+    通过环境变量 ENGINE_HOOK_DEBUG 控制开关：
+    - 未设置（默认）→ 直接 return，零开销
+    - 已设置 → 执行原有日志写入逻辑
+    """
+    if not os.environ.get("ENGINE_HOOK_DEBUG"):
+        return
     try:
-        import datetime
         log_path = os.path.join(os.path.dirname(__file__), "_hook2_role.log")
         with open(log_path, "a", encoding="utf-8") as f:
-            f.write(f"[{datetime.datetime.now()}] {msg}\n")
+            f.write(f"[{datetime.now()}] {msg}\n")
     except Exception:
         pass
 
@@ -644,21 +640,21 @@ def main():
     tool_output = data.get("tool_response", "") or data.get("tool_output", "")
 
     # 调试日志（写入临时文件，用于排查 Hook 输入格式问题）
-    try:
-        import datetime
-        debug_path = os.path.join(os.path.dirname(__file__), "_hook_debug.log")
-        with open(debug_path, "a", encoding="utf-8") as f:
-            f.write(f"\n[{datetime.datetime.now()}] tool_name={tool_name}\n")
-            f.write(f"  data keys={list(data.keys())}\n")
-            f.write(f"  tool_input={json.dumps(tool_input, ensure_ascii=False)[:300]}\n")
-            f.write(f"  tool_output type={type(tool_output).__name__}, len={len(str(tool_output))}\n")
-            f.write(f"  tool_output={str(tool_output)[:300]}\n")
-            # 检查其他可能的输出字段
-            for k in data:
-                if k not in ('tool_name', 'tool_input', 'tool_output'):
-                    f.write(f"  extra field '{k}'={str(data[k])[:200]}\n")
-    except Exception:
-        pass
+    if os.environ.get("ENGINE_HOOK_DEBUG"):
+        try:
+            debug_path = os.path.join(os.path.dirname(__file__), "_hook_debug.log")
+            with open(debug_path, "a", encoding="utf-8") as f:
+                f.write(f"\n[{datetime.now()}] tool_name={tool_name}\n")
+                f.write(f"  data keys={list(data.keys())}\n")
+                f.write(f"  tool_input={json.dumps(tool_input, ensure_ascii=False)[:300]}\n")
+                f.write(f"  tool_output type={type(tool_output).__name__}, len={len(str(tool_output))}\n")
+                f.write(f"  tool_output={str(tool_output)[:300]}\n")
+                # 检查其他可能的输出字段
+                for k in data:
+                    if k not in ('tool_name', 'tool_input', 'tool_output'):
+                        f.write(f"  extra field '{k}'={str(data[k])[:200]}\n")
+        except Exception:
+            pass
 
     # v7.1: 检测主 Agent 违规调用引擎脚本（仅拦截+报告，不修复 STATE）
     if tool_name == "Bash":

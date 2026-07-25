@@ -20,11 +20,10 @@ import argparse, json, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from session_path import resolve_ws_state, resolve_app_path
 from state_io import load_state, save_state, state_txn
+from engine_common import output
 
-
-def output(data):
-    print(json.dumps(data, ensure_ascii=False))
-    sys.exit(0 if data.get("status") == "success" else 1)
+# 可配置超时（环境变量 STATE_OP_TIMEOUT 控制 set_state 子进程超时）
+_SET_STATE_TIMEOUT = int(os.environ.get("STATE_OP_TIMEOUT", "10"))
 
 
 def main():
@@ -44,7 +43,6 @@ def main():
             output({"status": "failure", "error_code": "OIC-E104",
                     "message": "jump 需要 --step 参数", "new_state_snapshot": None})
         state = _do_jump(args.state_path, args.step)
-        # v7.2: 更新工作区索引
         try:
             from workspace_index import sync_from_state
             sync_from_state(args.workspace_id or "default", state)
@@ -57,7 +55,7 @@ def main():
     cmd = ["python3", "engine/scripts/set_state.py", "--action", "reset",
            "--step", "ALL", "--state-path", args.state_path]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=_SET_STATE_TIMEOUT)
         if result.returncode == 0:
             data = json.loads(result.stdout)
             output({"status": data.get("status", "failure"),
@@ -122,7 +120,6 @@ def _do_jump(state_path, target_step):
         st.clear()
         st.update(snapshot)
 
-        # v7.3: 恢复并行兄弟分支
         # 快照中 step_status 含有 jump 时刻正在执行的兄弟分支。
         # 时间回退后没有实际 agent 在跑，需将其源步的 verdict 信号写入 pending_routes，
         # 由下一次 --next 的冷路径重新路由生成全新 dispatch（orchestrator 只读 pending_routes）。

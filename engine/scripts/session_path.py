@@ -21,6 +21,10 @@ def resolve_ws_state(ws_id):
     return os.path.join(resolve_ws_base(ws_id), "STATE.json")
 
 
+def resolve_mode_path(ws_id, app_path=None):
+    return os.path.join(resolve_ws_base(ws_id), "MODE")
+
+
 # v9.2: resolve_ws_process 已删除（process 目录机制已废弃）
 
 

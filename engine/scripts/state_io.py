@@ -39,16 +39,7 @@ def _write_unlocked(state_path, state):
 
     调用者必须已持有 lock_path 文件锁。
     """
-    # v9.2 诊断日志：记录每次写入的调用者和 step_status 状态
-    import traceback as _tb, time as _time
-    _ws = os.path.basename(os.path.dirname(state_path))
-    _ss_keys = list((state.get("step_status") or {}).keys())
-    _completed_keys = list((state.get("completed") or {}).keys())
-    _caller = _tb.extract_stack()[-3] if len(_tb.extract_stack()) >= 3 else _tb.extract_stack()[-2]
-    _caller_info = f"{_caller.filename.split('/')[-1]}:{_caller.lineno} {_caller.name}"
-    _diag_line = f"[{_time.strftime('%H:%M:%S')}] WRITE_STATE ws={_ws} caller={_caller_info} step_status={_ss_keys} completed={_completed_keys}"
-    with open(state_path.replace("STATE.json", "_state_write.log"), "a") as _lf:
-        _lf.write(_diag_line + "\n")
+    _diag_log(state_path, state)
 
     d = os.path.dirname(state_path)
     if d:
@@ -64,6 +55,27 @@ def _write_unlocked(state_path, state):
         except OSError:
             pass
         raise
+
+
+def _diag_log(state_path, state):
+    """诊断日志：记录每次写入的调用者和 step_status 状态。
+
+    通过环境变量 ENGINE_DIAG_LOG 控制开关：
+    - 未设置（默认）→ 直接 return，零开销
+    - 已设置 → 执行原有日志写入逻辑
+    """
+    if not os.environ.get("ENGINE_DIAG_LOG"):
+        return
+    import traceback as _tb, time as _time
+    _ws = os.path.basename(os.path.dirname(state_path))
+    _ss_keys = list((state.get("step_status") or {}).keys())
+    _completed_keys = list((state.get("completed") or {}).keys())
+    _stack = _tb.extract_stack()
+    _caller = _stack[-4] if len(_stack) >= 4 else _stack[-2]
+    _caller_info = f"{_caller.filename.split('/')[-1]}:{_caller.lineno} {_caller.name}"
+    _diag_line = f"[{_time.strftime('%H:%M:%S')}] WRITE_STATE ws={_ws} caller={_caller_info} step_status={_ss_keys} completed={_completed_keys}"
+    with open(state_path.replace("STATE.json", "_state_write.log"), "a") as _lf:
+        _lf.write(_diag_line + "\n")
 
 
 def save_state(state_path, state, validate=True):
@@ -130,7 +142,6 @@ def state_txn(state_path, timeout=60):
         finally:
             # 异常路径：跳过 _write_unlocked，磁盘状态保持不变
             release_lock(lock_file)
-            # v9.2: 删除锁文件，避免残留文件导致后续 state_txn 误判
             # （fcntl.flock 是进程级锁，进程退出自动释放，但锁文件残留会
             # 让 open(lock_path, "w") 截断时与其他进程产生竞争）
             try:

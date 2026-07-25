@@ -31,8 +31,9 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from session_path import resolve_ws_state, resolve_app_path
-from state_io import load_state, save_state
+from session_path import resolve_ws_state, resolve_app_path, resolve_workspace_output
+from state_io import load_state
+from engine_common import load_router_registry_cached, output
 
 # 可配置超时（与 orchestrator.py 保持一致）
 _SCRIPT_TIMEOUT = int(os.environ.get("STATE_OP_TIMEOUT", "30"))
@@ -42,7 +43,6 @@ _ORCHESTRATOR = "engine/scripts/orchestrator.py"
 
 
 # ─── 工具函数 ───
-# v4.2: _save_state_locked 已删除，所有写入通过 state_io.save_state()
 
 def run_engine(args_list):
     """调用引擎脚本并返回 (success, result_dict)。
@@ -86,8 +86,62 @@ def _print_json(data, workspace_id=None):
         data["workspace_id"] = workspace_id
     if "directive" not in data:
         data["directive"] = _gen_directive(data)
-    print(json.dumps(data, ensure_ascii=False, indent=2))
-    sys.exit(0)
+    output(data, force_exit_zero=True)
+
+
+# ─── directive handlers ───
+
+def _dir_delegate(data, s):
+    prompts = data.get("task_prompts", [])
+    n = len(prompts)
+    parallel = data.get("parallel", False)
+    if n == 0:
+        return f"调 step.py --next{s} 获取任务"
+    if n == 1:
+        return (f"发起 1 个 Task(role-executor, prompt 为 task_prompts[0])。"
+                f"Task 返回后调 step.py --next{s}")
+    if parallel:
+        return (f"发起 {n} 个 Task(role-executor)（同一消息并行）。"
+                f"全部 Task 返回后调 step.py --next{s}")
+    return (f"发起 {n} 个 Task(role-executor)。全部 Task 返回后调 step.py --next{s}")
+
+
+def _dir_confirm(data, s):
+    """共享 handler：action='confirm' 和 next='confirm' 合并。"""
+    pending = data.get("pending", [])
+    decide_items = []
+    for p in pending:
+        step = p.get("step", "")
+        decide_items.append(f'{{"step":"{step}","decision":"<confirmed 或 fail>"}}')
+    decisions_json = "[" + ",".join(decide_items) + "]"
+    steps_desc = ", ".join(p.get("step", "?") for p in pending)
+    return (f"向用户展示确认请求：{steps_desc}。收到回复后执行：\n"
+            f"python3 engine/scripts/step.py --decide --decisions '{decisions_json}'{s}")
+
+
+def _dir_complete(data, s):
+    return "任务完成，结束"
+
+
+_ACTION_HANDLERS = {
+    "delegate": _dir_delegate,
+    "confirm": _dir_confirm,
+    "complete": _dir_complete,
+    "loop": lambda d, s: f"调 step.py --next{s}",
+    "wait": lambda d, s: f"BLOCKING：{d.get('reason', '等待中')}。向用户报告并等待介入",
+    "error": lambda d, s: f"BLOCKING：引擎错误 — {d.get('error', d.get('failed', '未知错误'))}",
+    "unknown": lambda d, s: f"BLOCKING：引擎返回未知状态 — {d.get('next', '?')}",
+}
+
+_NEXT_HANDLERS = {
+    "delegate": lambda d, s: f"调 step.py --next{s} 获取下一步",
+    "confirm": _dir_confirm,
+    "complete": _dir_complete,
+    "rework": lambda d, s: f"Gate 校验失败，重新执行（调 step.py --next 获取）",
+    "idempotent": lambda d, s: f"已处理，跳过。调 step.py --next{s}",
+    "wait": lambda d, s: f"BLOCKING：{d.get('reason', '等待中')}",
+    "error": lambda d, s: f"BLOCKING：永久失败 — {d.get('failed', [])}",
+}
 
 
 def _gen_directive(data):
@@ -99,99 +153,27 @@ def _gen_directive(data):
     sid = data.get("workspace_id", "")
     action = data.get("action", "")
     next_val = data.get("next", "")
-    status = data.get("status", "")
-
-    # 构建 workspace 参数后缀
     s = f" --workspace-id {sid}" if sid else ""
 
-    # --next 输出的 action
-    if action == "delegate":
-        prompts = data.get("task_prompts", [])
-        n = len(prompts)
-        parallel = data.get("parallel", False)
-        if n == 0:
-            return f"调 step.py --next{s} 获取任务"
-        if n == 1:
-            return (f"发起 1 个 Task(role-executor, prompt 为 task_prompts[0])。"
-                    f"Task 返回后调 step.py --next{s}")
-        if parallel:
-            return (f"发起 {n} 个 Task(role-executor)（同一消息并行）。"
-                    f"全部 Task 返回后调 step.py --next{s}")
-        return (f"发起 {n} 个 Task(role-executor)。全部 Task 返回后调 step.py --next{s}")
+    if action:
+        handler = _ACTION_HANDLERS.get(action)
+        if handler:
+            return handler(data, s)
 
-    if action == "confirm":
-        pending = data.get("pending", [])
-        decide_items = []
-        for p in pending:
-            step = p.get("step", "")
-            decide_items.append(f'{{"step":"{step}","decision":"<confirmed 或 fail>"}}')
-        decisions_json = "[" + ",".join(decide_items) + "]"
-        steps_desc = ", ".join(p.get("step", "?") for p in pending)
-        return (f"向用户展示以下步骤的确认请求：{steps_desc}。"
-                f"收到用户回复后执行：\n"
-                f"python3 engine/scripts/step.py --decide --decisions '{decisions_json}'{s}")
-
-    if action == "complete":
-        return "任务完成，结束"
-
-    if action == "loop":
-        return f"调 step.py --next{s}"
-
-    if action == "wait":
-        reason = data.get("reason", "等待中")
-        return f"BLOCKING：{reason}。向用户报告并等待介入"
-
-    if action == "error":
-        err = data.get("error", data.get("failed", "未知错误"))
-        return f"BLOCKING：引擎错误 — {err}"
-
-    if action == "unknown":
-        return f"BLOCKING：引擎返回未知状态 — {data.get('next', '?')}"
-
-    # --submit 输出的 next
-    if next_val == "delegate":
-        return f"调 step.py --next{s} 获取下一步"
-    if next_val == "confirm":
-        pending = data.get("pending", [])
-        decide_items = []
-        for p in pending:
-            step = p.get("step", "")
-            decide_items.append(f'{{"step":"{step}","decision":"<confirmed 或 fail>"}}')
-        decisions_json = "[" + ",".join(decide_items) + "]"
-        steps_desc = ", ".join(p.get("step", "?") for p in pending)
-        return (f"向用户展示确认请求：{steps_desc}。收到回复后执行：\n"
-                f"python3 engine/scripts/step.py --decide --decisions '{decisions_json}'{s}")
-    if next_val == "complete":
-        return "任务完成，结束"
-    if next_val == "rework":
-        return f"Gate 校验失败，重新执行（调 step.py --next 获取）"
-    if next_val == "idempotent":
-        return f"已处理，跳过。调 step.py --next{s}"
-    if next_val == "wait":
-        return f"BLOCKING：{data.get('reason', '等待中')}"
-    if next_val == "error":
-        failed = data.get("failed", [])
-        return f"BLOCKING：永久失败 — {failed}"
-
-    # --decide 输出的 next
-    if status == "success" and next_val:
-        if next_val == "delegate":
-            return f"调 step.py --next{s}"
-        if next_val == "complete":
-            return "任务完成，结束"
-        if next_val == "wait":
-            return f"BLOCKING：{data.get('reason', '等待中')}"
+    if next_val:
+        handler = _NEXT_HANDLERS.get(next_val)
+        if handler:
+            return handler(data, s)
 
     return f"调 step.py --next{s}"
 
 
 def _print_error(error, action="error"):
     """输出错误 JSON 并以非零码退出。"""
-    print(json.dumps({
+    output({
         "action": action, "status": "error", "error": error,
         "directive": f"BLOCKING：引擎错误 — {error}"
-    }, ensure_ascii=False, indent=2))
-    sys.exit(1)
+    })
 
 
 def _check_idempotent(state, dispatch_id):
@@ -199,7 +181,6 @@ def _check_idempotent(state, dispatch_id):
     if not dispatch_id:
         return False
 
-    # v4.1: 读 completed
     completed = state.get("completed", {}) or {}
     for ckpt_data in completed.values():
         if isinstance(ckpt_data, dict) and ckpt_data.get("id") == dispatch_id:
@@ -252,7 +233,6 @@ def _build_task_prompt(dispatch, workspace_id, state_path, app_path=None):
         for inp in inputs:
             lines.append(f"- {inp}")
         lines.append(f"")
-    # v9.2: principles 内联注入机制已删除（compiler 从不生成 principles 字段，导致 dead code）。
     # 如果需要原则指导，使用 knowledge inject_to 机制注入到角色 inputs。
     # 反馈物料由边 carries 自动注入，无需 step.py 处理。
     if user_request:
@@ -263,7 +243,6 @@ def _build_task_prompt(dispatch, workspace_id, state_path, app_path=None):
     lines.append(f"1. Read skill 文件")
     lines.append(f"2. 按 skill 文件的步骤执行")
     lines.append(f"3. 写入产出物到指定路径（已存在文件优先用 SearchReplace；新建文件用 Write）")
-    # v7.0: status 不再要求 role-executor 显式写入，由 Hook② 自动推导。
     # role-executor 只需返回 step + verdict + outputs，status 由系统判定。
     verdict_hint = ""
     schema_constraints = dispatch.get("schema_constraints", {})
@@ -296,7 +275,6 @@ def cmd_next(args):
     if args.task_request:
         extra += ["--task-request", args.task_request]
 
-    # v4.0: 统一走 dispatch（v4.0 unified dispatch）
     ok, result = run_engine([_ORCHESTRATOR, "--phase", "dispatch"] + extra)
     if not ok:
         _print_error(result.get("error", "orchestrator dispatch 失败"))
@@ -311,7 +289,6 @@ def cmd_next(args):
         for d in dispatches:
             prompt = _build_task_prompt(d, args.workspace_id, state_path, app_path)
             task_prompts.append(prompt)
-        # v4.1: pbc 从 step_status 派生，不再手动设置（消除多源冲突）
         # pbc = len(dispatches) 的逻辑已移除，Hook② 直接读 len(step_status)
         _print_json({
             "action": "delegate",
@@ -346,46 +323,24 @@ def _resolve_dispatch_id(state, step):
     return None
 
 
-def cmd_submit(args):
-    """step.py --submit: 提交执行结果（role-executor 调用）。
+def _resolve_authoritative_outputs(step_name, ws_id, app_path):
+    """从 registry.json/ROUTER.json 解析权威产出物路径。
 
-    内部调用 orchestrator.py --phase post_execute，将返回值翻译为统一 next 格式：
-      - delegate  : 有后续步骤需执行（调 --next 获取）
-      - confirm   : 有 awaiting_confirmation
-      - complete  : 任务完成
-      - rework    : Gate 失败，重试 dispatch 已缓存（role-executor 需重新执行）
-      - idempotent: dispatch_id 已处理，跳过
-      - error     : 永久失败
-
-    v4.0.1 路径权威源机制：outputs 路径从 registry.json 的权威声明中取，
-    不信任 role-executor 返回的路径（role-executor 可能拼错路径）。
+    路径权威源机制：outputs 路径从 registry.json 的权威声明中取，
+    不信任 role-executor 返回的路径。
     """
-    app_path = resolve_app_path(args.workspace_id, args.app_path)
-    state_path = resolve_ws_state(args.workspace_id)
-
-    # ── 路径权威源：从 registry.json 读取 output_targets ──
-    # role-executor 返回的 outputs 仅用于记录，不作为路径权威
-    from session_path import resolve_workspace_output
-    step_name = args.step
-    registry_path = os.path.join(app_path, "registry.json")
-    router_path = os.path.join(app_path, "ROUTER.json")
-    ws_id = args.workspace_id or ""
-
     authoritative_outputs = []
     try:
-        with open(router_path, "r", encoding="utf-8") as f:
-            router_data = json.load(f)
-        with open(registry_path, "r", encoding="utf-8") as f:
-            registry_data = json.load(f)
+        _cached = load_router_registry_cached(app_path)
+        router_data = _cached["router"]
+        registry_data = _cached["registry"]
 
-        # 从 ROUTER.json 找到 step → role 映射
         step_entry = next((s for s in router_data.get("steps", []) if s["step"] == step_name), None)
         if step_entry:
             role_name = step_entry["role"]
             reg_entry = next((r for r in registry_data if r.get("role_name") == role_name), None)
             if reg_entry:
                 for o in reg_entry.get("outputs", []):
-                    # v9.2: 删除 o_type 传递（resolve_workspace_output 已不接受 type 参数）
                     resolved = resolve_workspace_output(ws_id, o["path"], app_path)
                     authoritative_outputs.append({
                         "name": o.get("name", ""),
@@ -396,90 +351,95 @@ def cmd_submit(args):
 
     if not authoritative_outputs:
         _print_error("无法从 registry.json/ROUTER.json 解析产出物路径，拒绝回退到 role-executor 自报路径")
+    return authoritative_outputs
 
-    outputs = authoritative_outputs
 
-    # ── 加载 STATE.json ──
-    try:
-        with open(state_path, "r", encoding="utf-8") as f:
-            st = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        st = {}
-
-    # ── 自动定位 dispatch_id（若未显式传入）──
-    # dispatch_id 是幂等令牌，不是执行前提条件。
-    # 找不到时跳过幂等检查，不阻塞流程。
-    dispatch_id = args.dispatch_id
-    if not dispatch_id:
-        dispatch_id = _resolve_dispatch_id(st, args.step)
-
-    # ── 幂等检查：dispatch_id 已处理则跳过 ──
-    # 仅在 dispatch_id 存在时检查（避免 None 匹配）
+def _check_submit_idempotency(st, dispatch_id, workspace_id):
+    """幂等检查：若 dispatch_id 已处理则输出 idempotent 信封并退出。"""
     if dispatch_id and _check_idempotent(st, dispatch_id):
         _print_json({
             "status": "success",
             "next": "idempotent",
             "message": f"dispatch_id {dispatch_id} 已处理",
-        })
+        }, workspace_id)
 
-    # ── 构造 post_execute results 参数 ──
-    result_entry = {
-        "step": args.step,
-        "status": "confirmed",
-        "outputs": outputs,
-    }
-    if args.verdict:
-        result_entry["verdict"] = args.verdict
-    # v9.2: 传递完整协议信封，供 Gate Layer 0 校验
-    if args.envelope:
-        try:
-            result_entry["envelope"] = json.loads(args.envelope)
-        except (json.JSONDecodeError, ValueError):
-            pass  # 非 JSON 时由 Gate Layer 0 自然报错
 
+def _call_post_execute(state_path, app_path, workspace_id, result_entry):
+    """调用 orchestrator post_execute 并返回 (ok, result)。"""
     extra = ["--state-path", state_path, "--app-path", app_path]
-    if args.workspace_id:
-        extra += ["--workspace-id", args.workspace_id]
-
-    ok, result = run_engine([
+    if workspace_id:
+        extra += ["--workspace-id", workspace_id]
+    return run_engine([
         _ORCHESTRATOR,
         "--phase", "post_execute",
         "--results", json.dumps([result_entry]),
     ] + extra)
 
-    if not ok:
-        _print_error(result.get("error", "orchestrator post_execute 失败"))
 
-    # ── 翻译返回值 ──
+def _translate_submit_result(result):
+    """将 post_execute 返回值翻译为统一 action 信封。"""
     next_val = result.get("next", "")
     failed = result.get("failed", [])
     pending = result.get("pending", [])
     gate_results = result.get("gate_results", [])
 
     if failed and next_val == "error":
-        action = {"status": "error", "next": "error", "failed": failed}
+        return {"status": "error", "next": "error", "failed": failed}
     elif next_val == "error":
-        action = {"status": "error", "next": "error", "reason": result.get("reason", "")}
+        return {"status": "error", "next": "error", "reason": result.get("reason", "")}
     elif next_val in ("dispatch",):
-        action = {
-            "status": "success",
-            "next": "delegate",
-            "gate_results": gate_results,
-        }
+        return {"status": "success", "next": "delegate", "gate_results": gate_results}
     elif next_val == "confirm":
-        action = {
-            "status": "success",
-            "next": "confirm",
-            "pending": pending,
-            "gate_results": gate_results,
-        }
+        return {"status": "success", "next": "confirm", "pending": pending, "gate_results": gate_results}
     elif next_val == "complete":
-        action = {"status": "success", "next": "complete", "gate_results": gate_results}
+        return {"status": "success", "next": "complete", "gate_results": gate_results}
     elif next_val == "wait":
-        action = {"status": "success", "next": "wait", "reason": result.get("reason", "")}
+        return {"status": "success", "next": "wait", "reason": result.get("reason", "")}
     else:
-        action = {"status": "success", "next": next_val, "raw": result, "gate_results": gate_results}
+        return {"status": "success", "next": next_val, "raw": result, "gate_results": gate_results}
 
+
+def cmd_submit(args):
+    """step.py --submit: 提交执行结果（role-executor 调用）。
+
+    内部调用 orchestrator.py --phase post_execute，将返回值翻译为统一 next 格式：
+      - delegate  : 有后续步骤需执行（调 --next 获取）
+      - confirm   : 有 awaiting_confirmation
+      - complete  : 任务完成
+      - rework    : Gate 失败，重试 dispatch 已缓存（role-executor 需重新执行）
+      - idempotent: dispatch_id 已处理，跳过
+      - error     : 永久失败
+    """
+    app_path = resolve_app_path(args.workspace_id, args.app_path)
+    state_path = resolve_ws_state(args.workspace_id)
+    ws_id = args.workspace_id or ""
+
+    # ── 路径权威源 ──
+    outputs = _resolve_authoritative_outputs(args.step, ws_id, app_path)
+
+    # ── 加载 STATE + 幂等检查 ──
+    st = load_state(state_path) or {}
+    dispatch_id = args.dispatch_id
+    if not dispatch_id:
+        dispatch_id = _resolve_dispatch_id(st, args.step)
+    _check_submit_idempotency(st, dispatch_id, args.workspace_id)
+
+    # ── 构造 result_entry + 调用 post_execute ──
+    result_entry = {"step": args.step, "status": "confirmed", "outputs": outputs}
+    if args.verdict:
+        result_entry["verdict"] = args.verdict
+    if args.envelope:
+        try:
+            result_entry["envelope"] = json.loads(args.envelope)
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    ok, result = _call_post_execute(state_path, app_path, args.workspace_id, result_entry)
+    if not ok:
+        _print_error(result.get("error", "orchestrator post_execute 失败"))
+
+    # ── 翻译返回值 ──
+    action = _translate_submit_result(result)
     _print_json(action, args.workspace_id)
 
 
@@ -529,7 +489,6 @@ def cmd_decide(args):
 
 def cmd_list_workspaces(args):
     """列出所有 workspace 及其状态（v7.2: 优先读 index.json）。"""
-    # v7.2: 优先从 index.json 读取
     try:
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         from workspace_index import list_all, to_local_display

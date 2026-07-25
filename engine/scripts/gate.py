@@ -14,14 +14,15 @@ Usage:
   python3 engine/scripts/gate.py --mode envelope --step <STEP> --envelope <json> --app-path <path>
   python3 engine/scripts/gate.py --mode file --step <STEP> --output-path <path> --app-path <path> [--workspace-id <id>]
 """
-import argparse, json, os, sys
+import argparse, json, os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from session_path import resolve_ws_state, resolve_app_path
+from session_path import resolve_ws_state, resolve_app_path, resolve_ws_base, read_workspace_root
+from engine_common import output as _engine_output, load_router_registry_cached
 
 
 def output(data):
-    print(json.dumps(data, ensure_ascii=False))
-    sys.exit(0)
+    """Gate 始终以 exit 0 退出（校验结果通过 verdict 字段传递）。"""
+    _engine_output(data, force_exit_zero=True)
 
 
 def fail(message):
@@ -175,55 +176,26 @@ def validate_deliverable_contract(file_path, raw_content, contract):
     return errors
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Gate 统一两阶段校验器")
-    parser.add_argument("--mode", default="file", choices=["envelope", "file"],
-                        help="envelope=信封校验(Layer 0);file=文件校验(Layer 1,默认)")
-    parser.add_argument("--step", required=True)
-    parser.add_argument("--output-path", default=None, help="file 模式:产出物路径")
-    parser.add_argument("--envelope", default=None, help="envelope 模式:完整信封 JSON")
-    parser.add_argument("--state-path", default=None)
-    parser.add_argument("--app-path", default=None)
-    parser.add_argument("--workspace-id", default=None)
-    args = parser.parse_args()
+def _run_envelope_mode(args, step_def):
+    """Layer 0: 协议信封校验（--mode envelope）。
+    失败 → ENVELOPE_FAIL → BLOCKING（不走 fail 边）。
+    """
+    if not args.envelope:
+        output({"verdict": "ENVELOPE_FAIL", "errors": ["--mode envelope 需要 --envelope 参数"]})
+    try:
+        envelope = json.loads(args.envelope)
+    except (json.JSONDecodeError, ValueError) as e:
+        output({"verdict": "ENVELOPE_FAIL", "errors": [f"envelope 不是有效 JSON: {e}"]})
+    errors = validate_envelope(envelope, step_def)
+    if errors:
+        output({"verdict": "ENVELOPE_FAIL", "errors": errors})
+    output({"verdict": "PASS", "errors": []})
 
-    app_path = args.app_path or resolve_app_path(args.workspace_id)
-    # v9.2: state_path 延迟到 file 模式才解析（envelope 模式不需要 state）
-    state_path = args.state_path
-    if state_path is None and args.workspace_id:
-        try:
-            state_path = resolve_ws_state(args.workspace_id)
-        except Exception:
-            state_path = None
 
-    # ── 加载 ROUTER.json（两种模式都需要查找 step_def）──
-    router_path = os.path.join(app_path, "ROUTER.json")
-    router = {}
-    if os.path.exists(router_path):
-        with open(router_path, "r", encoding="utf-8") as f:
-            router = json.load(f)
-    step_def = next((s for s in router.get("steps", []) if s["step"] == args.step), None)
-
-    # ════════════════════════════════════════════════════════════
-    # Layer 0: 协议信封校验（--mode envelope）
-    # 失败 → ENVELOPE_FAIL → BLOCKING（不走 fail 边）
-    # ════════════════════════════════════════════════════════════
-    if args.mode == "envelope":
-        if not args.envelope:
-            output({"verdict": "ENVELOPE_FAIL", "errors": ["--mode envelope 需要 --envelope 参数"]})
-        try:
-            envelope = json.loads(args.envelope)
-        except (json.JSONDecodeError, ValueError) as e:
-            output({"verdict": "ENVELOPE_FAIL", "errors": [f"envelope 不是有效 JSON: {e}"]})
-        errors = validate_envelope(envelope, step_def)
-        if errors:
-            output({"verdict": "ENVELOPE_FAIL", "errors": errors})
-        output({"verdict": "PASS", "errors": []})
-
-    # ════════════════════════════════════════════════════════════
-    # Layer 1: 产出物文件校验（--mode file，默认）
-    # 失败 → FAIL → 走 fail 边（质量问题，可重试）
-    # ════════════════════════════════════════════════════════════
+def _run_file_mode(args, step_def, app_path, state_path):
+    """Layer 1: 产出物文件校验（--mode file，默认）。
+    失败 → FAIL → 走 fail 边（质量问题，可重试）。
+    """
     if not args.output_path:
         fail("--mode file 需要 --output-path 参数")
 
@@ -256,7 +228,7 @@ def main():
     try:
         raw = raw_bytes.decode("utf-8")
     except (UnicodeDecodeError, ValueError):
-        # 无法解码为 UTF-8 → 物理检查通过即 PASS
+        #无法解码为 UTF-8 → 物理检查通过即 PASS
         output({"verdict": "PASS", "errors": []})
     try:
         data = json.loads(raw)
@@ -269,8 +241,10 @@ def main():
         # 无配置文件 → 只做物理检查（已有内容即 PASS）
         output({"verdict": "PASS", "errors": []})
 
-    with open(reg_path, "r", encoding="utf-8") as f:
-        registry = json.load(f)
+    try:
+        registry = load_router_registry_cached(app_path).get("registry", [])
+    except Exception:
+        registry = []
 
     if not step_def:
         fail(f"STEP {args.step} 不在 ROUTER.json 中")
@@ -281,7 +255,6 @@ def main():
         fail(f"角色 {role_name} 不在 registry.json 中")
 
     # ── 5. 深度契约校验（可选 contract，不再区分 type）──
-    import re
     schema_dir = re.sub(r'[^\w\u4e00-\u9fff]', '_', role_name)
     schema_file = os.path.join(app_path, "roles", schema_dir, "schema.json")
 
@@ -314,22 +287,53 @@ def main():
     # 写 gate-result.json 到 workspace
     ws_base = None
     if args.workspace_id:
-        from session_path import resolve_ws_base
         ws_base = resolve_ws_base(args.workspace_id)
     elif state_path:
         ws_base = os.path.dirname(state_path)
     if ws_base:
-        ws_root = ws_base
-        wr_file = os.path.join(ws_base, "WORKSPACE_ROOT")
-        if os.path.exists(wr_file):
-            with open(wr_file, "r") as f:
-                ws_root = f.read().strip()
+        ws_root = read_workspace_root(args.workspace_id) if args.workspace_id else None
+        if not ws_root:
+            ws_root = ws_base
         result_file = os.path.join(ws_root, "outputs", f"{args.step}-gate-result.json")
         os.makedirs(os.path.dirname(result_file), exist_ok=True)
         with open(result_file, "w", encoding="utf-8") as f:
             json.dump(result, f, ensure_ascii=False, indent=2)
 
     output(result)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Gate 统一两阶段校验器")
+    parser.add_argument("--mode", default="file", choices=["envelope", "file"],
+                        help="envelope=信封校验(Layer 0);file=文件校验(Layer 1,默认)")
+    parser.add_argument("--step", required=True)
+    parser.add_argument("--output-path", default=None, help="file 模式:产出物路径")
+    parser.add_argument("--envelope", default=None, help="envelope 模式:完整信封 JSON")
+    parser.add_argument("--state-path", default=None)
+    parser.add_argument("--app-path", default=None)
+    parser.add_argument("--workspace-id", default=None)
+    args = parser.parse_args()
+
+    app_path = args.app_path or resolve_app_path(args.workspace_id)
+    state_path = args.state_path
+    if state_path is None and args.workspace_id:
+        try:
+            state_path = resolve_ws_state(args.workspace_id)
+        except Exception:
+            state_path = None
+
+    # ── 加载 ROUTER.json（两种模式都需要查找 step_def）──
+    try:
+        _cached = load_router_registry_cached(app_path)
+        router = _cached.get("router", {})
+    except Exception:
+        router = {}
+    step_def = next((s for s in router.get("steps", []) if s["step"] == args.step), None)
+
+    if args.mode == "envelope":
+        _run_envelope_mode(args, step_def)
+
+    _run_file_mode(args, step_def, app_path, state_path)
 
 
 if __name__ == "__main__":

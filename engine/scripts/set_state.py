@@ -7,7 +7,7 @@ import argparse, json, os, sys, copy, shutil
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from session_path import resolve_ws_state
 from state_io import load_state, save_state
-from datetime import datetime, timezone
+from engine_common import now_iso, output
 
 
 class ValidationException(Exception):
@@ -17,16 +17,12 @@ class ValidationException(Exception):
         super().__init__(message)
 
 
-def now_iso():
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 def output_success(state):
-    print(json.dumps({"status": "success", "error_code": None, "new_state": state}, ensure_ascii=False))
-    sys.exit(0)
+    output({"status": "success", "error_code": None, "new_state": state})
 
 def output_failure(error_code, message):
-    print(json.dumps({"status": "failure", "error_code": error_code, "message": message, "new_state": None}, ensure_ascii=False))
-    sys.exit(1)
+    output({"status": "failure", "error_code": error_code, "message": message, "new_state": None})
 
 def create_initial_state():
     return {
@@ -49,7 +45,6 @@ def validate_action(state, action, step):
     if state.get("terminal_state") is not None and action not in ("terminal", "reset"):
         raise ValidationException("OIC-E206", f"终态不可变：terminal_state={state['terminal_state']}")
 
-# v4.2: do_rollback 已删除。僵尸 executing 清理由 state_health_check.py Z1 统一接管。
 
 def do_reset(state):
     state["step_status"] = {}
@@ -80,7 +75,6 @@ def _save_snapshot(state_path, step, state):
     snapshot_path = os.path.join(snapshot_dir, f"{step}.json")
 
     snapshot = copy.deepcopy(state)
-    # v7.3: 保留 step_status 和 active_dispatches — 含并行兄弟分支信息
     snapshot["step_status"] = dict(state.get("step_status", {}))
     snapshot["active_dispatches"] = dict(state.get("active_dispatches", {}))
     snapshot["pending_dispatches"] = None       # 运行时缓存，由 --next 重新生成
@@ -97,12 +91,10 @@ def _clear_snapshots(state_path):
         shutil.rmtree(snapshot_dir)
 
 def do_advance(state, step, role, dispatch_id, verdict=None):
-    # v7.1: advance 成功 → 清除 engine_error 标志位
     state["engine_error"] = None
     ss = state.get("step_status", {})
     existing = ss.get(step, {})
     if not dispatch_id:
-        # v8.0 修复 P0-3：dispatch_id 为空时，禁止 fallback 到旧 checkpoint_id。
         # 原 bug：fallback 会导致 step.py --submit 的 _check_idempotent 误判为已处理，
         # 实际未生成新 checkpoint，advance 后的状态对下游不可追溯。
         # 修复方案：生成新 checkpoint_id，确保每次 advance 都有唯一幂等令牌。
@@ -121,7 +113,6 @@ def do_advance(state, step, role, dispatch_id, verdict=None):
     state.setdefault("completed", {})[step] = result
     state.setdefault("pending_routes", {})[step] = result
     state["metadata"]["last_advance_at"] = now_iso()
-    # v6.0: 清理 active_dispatches 中已完成 step 的 dispatch 缓存
     active = state.get("active_dispatches")
     if active and step in active:
         del active[step]
@@ -212,7 +203,6 @@ def main():
         append_history(state, args.action, args.step, "success")
         save_state(args.state_path, state)
 
-        # v7.2: 同步工作区注册表
         try:
             from workspace_index import sync_from_state, mark_reset
             ws_id = args.workspace_id or ""

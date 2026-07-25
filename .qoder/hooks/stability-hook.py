@@ -31,7 +31,7 @@ def is_execution_related(prompt):
     exec_words = [
         "confirmed", "pass", "continue", "继续", "推进", "执行",
         "启动", "重新启动", "重跑", "fail", "reject", "拒绝",
-        "confirmed", "确认", "通过", "运行",
+        "确认", "通过", "运行",
     ]
     if any(w in p for w in exec_words):
         return True

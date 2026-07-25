@@ -15,3 +15,13 @@ __pycache__/
 .qoder/hooks/_hook_debug.log
 .qoder/hooks/_hook_error.log
 .qoder/hooks/_hook2_role.log
+
+# 引擎运行时缓存
+*.router_cache.json
+
+# Playwright MCP 临时文件
+.playwright-mcp/
+
+# Qoder 运行时配置（本地特有）
+.qoder/mcp.json
+.qoder/playwright-launcher.sh

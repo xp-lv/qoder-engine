@@ -18,10 +18,8 @@ Usage:
 import argparse, json, os, re, sys
 from collections import defaultdict
 
-
-def load_json(path):
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from engine_common import load_json_safe
 
 
 def slugify(name):
@@ -32,11 +30,8 @@ def find_enum_in_schema(schema_path):
     """从 schema.json 提取 verdict enum（可能不存在）。"""
     if not os.path.exists(schema_path):
         return None
-    try:
-        schema = load_json(schema_path)
-        return schema.get("properties", {}).get("result", {}).get("properties", {}).get("verdict", {}).get("enum")
-    except (json.JSONDecodeError, ValueError):
-        return None
+    schema = load_json_safe(schema_path)
+    return schema.get("properties", {}).get("result", {}).get("properties", {}).get("verdict", {}).get("enum") if schema else None
 
 
 def find_verdicts_in_skill(skill_path):
@@ -59,8 +54,8 @@ def check_b1_verdict_consistency(app_path, errors, warnings):
         warnings.append("B1: ROUTER.json 或 registry.json 不存在，跳过")
         return
 
-    router = load_json(router_path)
-    registry = load_json(reg_path)
+    router = load_json_safe(router_path)
+    registry = load_json_safe(reg_path)
 
     reg_map = {r["role_name"]: r for r in registry}
     router_steps = {s["step"]: s for s in router.get("steps", [])}
@@ -109,7 +104,7 @@ def check_b3_path_consistency(app_path, errors, warnings):
             continue
         with open(skill_path, "r", encoding="utf-8") as f:
             skill_content = f.read()
-        schema = load_json(schema_path)
+        schema = load_json_safe(schema_path)
         for rf in schema.get("_required_files", []):
             path = rf.get("path", "")
             if path and path not in skill_content:
@@ -148,7 +143,7 @@ def check_e1_fail_edge_self_reference(app_path, errors, warnings):
     router_path = os.path.join(app_path, "ROUTER.json")
     if not os.path.exists(router_path):
         return
-    router = load_json(router_path)
+    router = load_json_safe(router_path)
 
     for step in router.get("steps", []):
         step_name = step["step"]
