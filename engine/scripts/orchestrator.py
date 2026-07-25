@@ -66,10 +66,6 @@ def load_router_and_registry(app_path):
 
 # ─── Phase 1: dispatch（Fetch）───
 
-def _get_completed(st):
-    """获取 completed（JOIN 权威源，持久完成记录）。"""
-    return st.get("completed", {})
-
 def _get_pending_routes(st):
     """获取 pending_routes（瞬态路由信号，路由后清空）。"""
     return st.get("pending_routes", {})
@@ -81,31 +77,26 @@ def _clear_pending_routes(state_path):
     with state_txn(state_path) as st:
         st["pending_routes"] = {}
 
-def _process_dispatch_pipeline(dispatches, st, app_path):
-    """统一管道：converge → dedup → cross-state filter。
-    所有 dispatch 生成路径必须经过此管道。
-    """
-    # Step 1: 全局汇集（JOIN 检查，读 completed）
-    filtered = _global_converge(dispatches, st, app_path)
-
-    # Step 2: 批内去重
+def _dedup_dispatches(dispatches):
+    """批内去重。JOIN 判断由 router.py 唯一负责（冗余的 _global_converge 已删除）。"""
     seen = set()
     unique = []
-    for d in filtered:
+    for d in dispatches:
         key = d.get("step", "")
         if key not in seen:
             seen.add(key)
             unique.append(d)
-
-    # completed 中的步骤可能需要重新执行（如架构师 R1/R2 修订）。改为只排除
-    # terminal 步骤（无 transitions 的终态节点不应再被 dispatch）。
-    # 注：重复 dispatch 的防护由 router.py 的 executing 检查 + max_executions 权威负责。
     return unique
 
 def _dispatch_from_pending_routes(state_path, app_path, workspace_id, task_request, st, pending_routes):
-    """冷路径：从 pending_routes 出发逐路由由。"""
+    """冷路径：从 pending_routes 出发逐路由由。
+
+    逐条清除：只清除被成功路由产出 dispatch 的 route_step，
+    JOIN 未满足的 route_step 保留（等待其他前驱到达）。
+    """
     all_dispatches = []
     all_complete = False
+    consumed_routes = []   # 已产出 dispatch 的 route_step（将被清除）
     for route_step, route_data in pending_routes.items():
         route_verdict = route_data.get("verdict", "confirmed")
         router_cmd = [
@@ -124,17 +115,21 @@ def _dispatch_from_pending_routes(state_path, app_path, workspace_id, task_reque
         rt_dispatches = rt_result.get("dispatch_instructions", [])
         if rt_dispatches:
             all_dispatches.extend(rt_dispatches)
+            consumed_routes.append(route_step)    # 成功路由，标记消费
         elif rt_result.get("message") == "all_complete":
             all_complete = True
+            consumed_routes.append(route_step)
 
-    all_dispatches = _process_dispatch_pipeline(all_dispatches, st, app_path)
+    all_dispatches = _dedup_dispatches(all_dispatches)
 
     if not all_dispatches:
         if all_complete:
-            _clear_pending_routes(state_path)
+            _clear_selected_routes(state_path, consumed_routes)
             mark_complete(state_path, app_path)
             output({"status": "success", "next": "complete", "reason": "all_complete"})
         else:
+            # JOIN 未满足或其他等待原因 — 保留未消费的 route_step
+            _clear_selected_routes(state_path, consumed_routes)
             diag_st = load_state(state_path)
             reason, is_error = _diagnose_wait_reason(diag_st, app_path)
             next_val = "error" if is_error else "wait"
@@ -142,7 +137,8 @@ def _dispatch_from_pending_routes(state_path, app_path, workspace_id, task_reque
                 _clear_pending_routes(state_path)
                 _mark_engine_error(state_path, reason)
             output({"status": "success", "next": next_val, "reason": reason})
-    _clear_pending_routes(state_path)
+    # 清除已消费的 route_step（成功路由产出 dispatch 的）
+    _clear_selected_routes(state_path, consumed_routes)
 
     _process_dispatches(state_path, app_path, workspace_id, all_dispatches, [], task_request)
 
@@ -165,7 +161,7 @@ def _dispatch_from_steps(state_path, app_path, workspace_id, from_steps, on_resu
 
     st = load_state(state_path)
     if dispatches and from_steps:
-        dispatches = _process_dispatch_pipeline(dispatches, st, app_path)
+        dispatches = _dedup_dispatches(dispatches)
 
     if not dispatches:
         if message == "all_complete":
@@ -191,39 +187,15 @@ def phase_dispatch(state_path, app_path, workspace_id, from_steps, on_result, ta
         return
     _dispatch_from_steps(state_path, app_path, workspace_id, from_steps, on_result, task_request)
 
-def _global_converge(dispatches, st, app_path):
-    """全局汇集：读 registry 的 input_groups 判断每个候选是否满足执行条件。
-
-    核心变更：JOIN 判断从 completed（持久权威源）读取，而非 finished。
-    completed 在整个执行期间保留，不被路由消费清除。
-
-    规则：
-    - input_groups 为空/不存在 → 无前置依赖 → 放行
-    - 任一组的全部来源都在 completed 中 → 放行
-    - 否则 → 等待
-
-    修复 P1-1：dispatch 字段名鲁棒化。原实现只查 d["role"],
-    但历史 / 未来可能用 role_name。现统一两种字段名查询，避免漏检。
-    """
-    completed_set = set(_get_completed(st).keys())
-
-    try:
-        _cached = load_router_registry_cached(app_path)
-        registry = _cached.get("registry", [])
-    except Exception:
-        return dispatches
-
-    # 构建 role_name → input_groups 映射，再通过 dispatch 的 role 查找
-    role_input_groups = {r["role_name"]: r.get("input_groups", []) for r in registry}
-
-    filtered = []
-    for d in dispatches:
-        role_key = d.get("role") or d.get("role_name") or ""
-        groups = role_input_groups.get(role_key, [])
-        if not groups or any(set(g).issubset(completed_set) for g in groups):
-            filtered.append(d)
-
-    return filtered
+def _clear_selected_routes(state_path, consumed_routes):
+    """逐条清除已消费的 pending_routes（仅删除 consumed_routes 中的 key）。"""
+    if not consumed_routes:
+        return
+    with state_txn(state_path) as st:
+        pr = st.get("pending_routes", {})
+        for step in consumed_routes:
+            pr.pop(step, None)
+        st["pending_routes"] = pr
 
 
 def _find_last_good_step(st):
@@ -275,7 +247,7 @@ def _diagnose_wait_reason(st, app_path):
     返回 (reason_str, is_error)。
     is_error=False 表示正常等待（JOIN 未满足），is_error=True 表示 STATE 可能不一致。
     """
-    completed = set(st.get("completed", {}).keys())
+    completed = set(st.get("completed", {}).keys()) | set(st.get("pending_routes", {}).keys())
     pending_routes = st.get("pending_routes", {})
     step_status = st.get("step_status", {})
 

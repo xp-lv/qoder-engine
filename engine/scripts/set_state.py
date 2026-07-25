@@ -95,9 +95,6 @@ def do_advance(state, step, role, dispatch_id, verdict=None):
     ss = state.get("step_status", {})
     existing = ss.get(step, {})
     if not dispatch_id:
-        # 原 bug：fallback 会导致 step.py --submit 的 _check_idempotent 误判为已处理，
-        # 实际未生成新 checkpoint，advance 后的状态对下游不可追溯。
-        # 修复方案：生成新 checkpoint_id，确保每次 advance 都有唯一幂等令牌。
         dispatch_id = f"ckpt_{now_iso().replace(':', '').replace('-', '')}"
     if not role:
         role = existing.get("role", "")
@@ -110,7 +107,10 @@ def do_advance(state, step, role, dispatch_id, verdict=None):
     }
     if verdict:
         result["verdict"] = verdict
-    state.setdefault("completed", {})[step] = result
+    # fail 只写 pending_routes（驱动 backward 路由），不写 completed（避免污染 JOIN 记忆）
+    # 非 fail 写 completed（JOIN 前驱记忆）+ pending_routes（路由信号）
+    if verdict != "fail":
+        state.setdefault("completed", {})[step] = result
     state.setdefault("pending_routes", {})[step] = result
     state["metadata"]["last_advance_at"] = now_iso()
     active = state.get("active_dispatches")
@@ -119,9 +119,10 @@ def do_advance(state, step, role, dispatch_id, verdict=None):
 
 def do_resume(state, step):
     completed = state.get("completed", {})
-    if step not in completed:
-        raise ValidationException("OIC-E205", f"无可恢复 completed：{step}")
-    r = completed[step]
+    pending = state.get("pending_routes", {})
+    r = completed.get(step) or pending.get(step)
+    if not r:
+        raise ValidationException("OIC-E205", f"无可恢复记录：{step}")
     state.setdefault("step_status", {})[step] = {
         "role": r.get("role", ""),
         "status": "executing",

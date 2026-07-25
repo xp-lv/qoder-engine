@@ -85,8 +85,12 @@ def _router_find_candidates(args, router, steps, steps_map, executing, finished)
 
 
 def _router_check_join_target(target, is_backward, is_initial_dispatch, steps_map,
-                               role_input_groups, completed_raw, executing):
-    """Check if a target passes JOIN requirements. Returns True if dispatchable."""
+                               role_input_groups, pending_routes, executing):
+    """Check if a target passes JOIN requirements. Returns True if dispatchable.
+
+    JOIN 权威源是 pending_routes（瞬态：已完成但尚未被路由消费的前驱信号）。
+    不再读 completed（持久历史档案，不参与 JOIN 判定）。
+    """
     if not is_backward and not is_initial_dispatch:
         target_def = steps_map.get(target, {})
         target_role = target_def.get("role", "")
@@ -96,13 +100,13 @@ def _router_check_join_target(target, is_backward, is_initial_dispatch, steps_ma
             for group in groups:
                 all_valid = True
                 for src in group:
-                    if src not in completed_raw:
+                    if src not in pending_routes:
                         all_valid = False
                         break
                     if src in executing:
                         all_valid = False
                         break
-                    src_verdict = completed_raw[src].get("verdict", "confirmed")
+                    src_verdict = pending_routes[src].get("verdict", "confirmed")
                     if not _source_points_to_target(src, src_verdict, target, steps_map):
                         all_valid = False
                         break
@@ -240,9 +244,12 @@ def _router_assemble_dispatches(dispatchable, steps_map, registry_map, args, app
     return dispatch_instructions
 
 
-def _router_check_reachable_closure(args, router, finished, completed_raw, executing,
+def _router_check_reachable_closure(args, router, finished, pending_routes, executing,
                                      steps_map, candidates, missing_steps, from_steps):
-    """BFS closure check and output when no dispatchable targets found."""
+    """BFS closure check and output when no dispatchable targets found.
+
+    使用 pending_routes 作为 BFS 遍历的 verdict 来源（瞬态信号）。
+    """
     entry = router.get("entry", "")
     visited = set()
     bfs_queue = [entry] if entry else []
@@ -253,7 +260,7 @@ def _router_check_reachable_closure(args, router, finished, completed_raw, execu
         visited.add(cur)
         if cur not in finished:
             continue
-        cur_verdict = completed_raw.get(cur, {}).get("verdict", "confirmed")
+        cur_verdict = pending_routes.get(cur, {}).get("verdict", "confirmed")
         cur_def = steps_map.get(cur, {})
         cur_trans = cur_def.get("transitions", {})
         cur_edge = cur_trans.get(cur_verdict, {})
@@ -300,8 +307,9 @@ def main():
     steps_map = {s["step"]: s for s in steps}
     registry_map = {r["role_name"]: r for r in registry}
     executing = set(state.get("step_status", {}).keys())
+    pending_routes = state.get("pending_routes", {})
     completed_raw = state.get("completed", {})
-    finished = set(completed_raw.keys())
+    finished = set(completed_raw.keys()) | set(pending_routes.keys())
     user_request = state.get("metadata", {}).get("user_request", "") or args.task_request
 
     # ── 确定候选目标 STEP ──
@@ -330,7 +338,7 @@ def main():
         if target in executing:
             continue
         if not _router_check_join_target(target, is_backward, is_initial_dispatch,
-                                          steps_map, role_input_groups, completed_raw, executing):
+                                          steps_map, role_input_groups, pending_routes, executing):
             continue
         if _router_update_edge_counts(target, is_initial_dispatch, from_set,
                                       steps_map, args.on, edge_counts):
@@ -348,7 +356,7 @@ def main():
 
     if not dispatchable:
         _router_check_reachable_closure(
-            args, router, finished, completed_raw, executing,
+            args, router, finished, pending_routes, executing,
             steps_map, candidates, missing_steps, from_steps)
 
     output({"status": "success", "error_code": None, "dispatch_instructions": dispatch_instructions})
