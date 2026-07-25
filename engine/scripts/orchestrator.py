@@ -42,12 +42,11 @@ def run_script(cmd):
 def mark_complete(state_path, app_path=None):
     """所有 complete 路径的唯一入口：写 terminal_state。
 
-    简化：完成判定的权威源是 router.py（通过可达集闭合检查返回
-    message="all_complete"）。本函数只做状态写入 + 幂等检查，
-    不重复完成判定逻辑（避免双检查点维护负担与不一致风险）。
-    
-    router.py 是 DAG 拓扑的路由决策者，“是否完成”本质上是“路由能否走到
-    下一个 step”，是 router 的职责。本函数信任 router 的判定。
+    完成判定由 orchestrator 全局决策：
+    - 冷路径：所有 pending_routes 的 verdict 边都无 candidates（has_candidates=False）
+      且无 dispatch 产出且无执行中步骤 → 全局终态。
+    - 热路径：from_steps 的 verdict 边无 candidates → 路径终态。
+    router.py 只提供 has_candidates 事实，不做终态判定。
     """
     with state_txn(state_path) as st:
         if st.get("terminal_state"):
@@ -95,8 +94,7 @@ def _dispatch_from_pending_routes(state_path, app_path, workspace_id, task_reque
     JOIN 未满足的 route_step 保留（等待其他前驱到达）。
     """
     all_dispatches = []
-    all_complete = False
-    consumed_routes = []   # 已产出 dispatch 的 route_step（将被清除）
+    consumed_routes = []   # 已产出 dispatch 或无 candidates 的 route_step（将被清除）
     for route_step, route_data in pending_routes.items():
         route_verdict = route_data.get("verdict", "confirmed")
         router_cmd = [
@@ -113,30 +111,40 @@ def _dispatch_from_pending_routes(state_path, app_path, workspace_id, task_reque
         if not ok:
             output_error("OIC-E010", f"router.py 失败: {rt_result}")
         rt_dispatches = rt_result.get("dispatch_instructions", [])
+        has_candidates = rt_result.get("has_candidates", True)
+        rt_message = rt_result.get("message", "")
         if rt_dispatches:
             all_dispatches.extend(rt_dispatches)
             consumed_routes.append(route_step)    # 成功路由，标记消费
-        elif rt_result.get("message") == "all_complete":
-            all_complete = True
+        elif rt_message == "route_failed":
+            # from_step 不存在于 ROUTER.json — STATE 不一致，不消费，不判定终态
+            pass
+        elif not has_candidates:
+            # verdict 边无 targets → 这条路径到终点，消费 route_step
             consumed_routes.append(route_step)
+        # else: 有 candidates 但被 JOIN/executing 过滤 → 不消费，等待
 
     all_dispatches = _dedup_dispatches(all_dispatches)
 
     if not all_dispatches:
-        if all_complete:
-            _clear_selected_routes(state_path, consumed_routes)
-            mark_complete(state_path, app_path)
-            output({"status": "success", "next": "complete", "reason": "all_complete"})
-        else:
-            # JOIN 未满足或其他等待原因 — 保留未消费的 route_step
-            _clear_selected_routes(state_path, consumed_routes)
-            diag_st = load_state(state_path)
-            reason, is_error = _diagnose_wait_reason(diag_st, app_path)
-            next_val = "error" if is_error else "wait"
-            if is_error:
-                _clear_pending_routes(state_path)
-                _mark_engine_error(state_path, reason)
-            output({"status": "success", "next": next_val, "reason": reason})
+        # 全局终态判定：所有 route_step 都被消费（无 candidates）且无 dispatch 产出
+        remaining_routes = set(pending_routes.keys()) - set(consumed_routes)
+        if not remaining_routes:
+            # 所有路径都到终点，确认无执行中步骤
+            check_st = load_state(state_path)
+            if not check_st.get("step_status"):
+                _clear_selected_routes(state_path, consumed_routes)
+                mark_complete(state_path, app_path)
+                output({"status": "success", "next": "complete", "reason": "all_paths_terminated"})
+        # 非终态 → 诊断等待原因
+        _clear_selected_routes(state_path, consumed_routes)
+        diag_st = load_state(state_path)
+        reason, is_error = _diagnose_wait_reason(diag_st, app_path)
+        next_val = "error" if is_error else "wait"
+        if is_error:
+            _clear_pending_routes(state_path)
+            _mark_engine_error(state_path, reason)
+        output({"status": "success", "next": next_val, "reason": reason})
     # 清除已消费的 route_step（成功路由产出 dispatch 的）
     _clear_selected_routes(state_path, consumed_routes)
 
@@ -157,16 +165,26 @@ def _dispatch_from_steps(state_path, app_path, workspace_id, from_steps, on_resu
         output_error("OIC-E010", f"router.py 失败: {router_result}")
 
     dispatches = router_result.get("dispatch_instructions", [])
-    message = router_result.get("message", "")
+    has_candidates = router_result.get("has_candidates", True)
 
     st = load_state(state_path)
     if dispatches and from_steps:
         dispatches = _dedup_dispatches(dispatches)
 
     if not dispatches:
-        if message == "all_complete":
-            mark_complete(state_path, app_path)
-            output({"status": "success", "next": "complete", "reason": "all_complete"})
+        message = router_result.get("message", "")
+        if message == "route_failed":
+            # from_step 不存在于 ROUTER.json — STATE 不一致
+            reason = router_result.get("reason", "route_failed")
+            _mark_engine_error(state_path, reason)
+            output({"status": "success", "next": "error", "reason": reason})
+        if not has_candidates:
+            # verdict 边无 targets → 这条路径到终点，确认无执行中步骤
+            check_st = load_state(state_path)
+            if not check_st.get("step_status"):
+                mark_complete(state_path, app_path)
+                output({"status": "success", "next": "complete", "reason": "path_terminated"})
+            output({"status": "success", "next": "wait", "reason": "分支执行中"})
         else:
             diag_st = load_state(state_path)
             reason, is_error = _diagnose_wait_reason(diag_st, app_path)
