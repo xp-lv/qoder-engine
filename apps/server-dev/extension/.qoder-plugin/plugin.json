@@ -1,0 +1,14 @@
+{
+  "name": "qoder-monitor-collector",
+  "displayName": "Qoder Monitor Collector",
+  "version": "1.0.0",
+  "description": "Collects local Qoder runtime metrics and periodically reports them to the monitoring server (single-user, no auth).",
+  "descriptionZh": "采集本机 Qoder 运行信息并周期上报到监控服务器（单用户、无认证）",
+  "author": { "name": "Qoder Monitor" },
+  "keywords": ["qoder-plugin", "monitor", "collector"],
+  "category": "Productivity",
+  "hooks": "./.qoder-plugin/qoder-hooks.json",
+  "logo": "./assets/logo.svg",
+  "defaultEnabled": true,
+  "marketplaceName": "local"
+}

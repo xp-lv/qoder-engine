@@ -1,0 +1,15 @@
+.value {
+  font-family: var(--font-mono);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  color: var(--color-text);
+  line-height: 1.2;
+}
+
+.unit {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  color: var(--color-text-secondary);
+  margin-left: var(--space-1);
+}

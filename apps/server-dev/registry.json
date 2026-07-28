@@ -1,0 +1,1267 @@
+[
+  {
+    "role_name": "需求确认师",
+    "skill_path": "roles/需求确认师/skill.md",
+    "blocking_mode": "manual",
+    "outputs": [
+      {
+        "name": "需求确认报告",
+        "path": "outputs/design/需求确认报告.md"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "用户需求",
+        "path": "00-需求描述.md"
+      },
+      {
+        "name": "需求闭环准则",
+        "path": "knowledge/需求闭环准则.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "需求红队"
+      ],
+      [
+        "需求确认师"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "需求红队",
+    "skill_path": "roles/需求红队/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "需求红队报告",
+        "path": "outputs/design/需求红队报告.json"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "需求确认报告",
+        "path": "outputs/design/需求确认报告.md"
+      },
+      {
+        "name": "需求闭环准则",
+        "path": "knowledge/需求闭环准则.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "需求确认师"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "数据层设计师",
+    "skill_path": "roles/数据层设计师/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "数据层设计",
+        "path": "outputs/design/数据层设计.md"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "需求确认报告",
+        "path": "outputs/design/需求确认报告.md"
+      },
+      {
+        "name": "需求红队报告",
+        "path": "outputs/design/需求红队报告.json"
+      },
+      {
+        "name": "接口兼容性校验规范",
+        "path": "knowledge/接口兼容性校验规范.md",
+        "type": "knowledge"
+      },
+      {
+        "name": "数据架构质量原则",
+        "path": "knowledge/数据架构质量原则.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "需求红队"
+      ],
+      [
+        "数据层设计师红队"
+      ],
+      [
+        "兼容性审核师"
+      ],
+      [
+        "数据层设计师"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "数据层设计师红队",
+    "skill_path": "roles/数据层设计师红队/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "数据层设计红队报告",
+        "path": "outputs/review/数据层设计红队报告.json"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "数据层设计",
+        "path": "outputs/design/数据层设计.md"
+      },
+      {
+        "name": "需求确认报告",
+        "path": "outputs/design/需求确认报告.md"
+      },
+      {
+        "name": "数据架构质量原则",
+        "path": "knowledge/数据架构质量原则.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "数据层设计师"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "后端设计师",
+    "skill_path": "roles/后端设计师/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "后端设计",
+        "path": "outputs/design/后端设计.md"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "需求确认报告",
+        "path": "outputs/design/需求确认报告.md"
+      },
+      {
+        "name": "需求红队报告",
+        "path": "outputs/design/需求红队报告.json"
+      },
+      {
+        "name": "接口兼容性校验规范",
+        "path": "knowledge/接口兼容性校验规范.md",
+        "type": "knowledge"
+      },
+      {
+        "name": "后端架构质量原则",
+        "path": "knowledge/后端架构质量原则.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "需求红队"
+      ],
+      [
+        "后端设计师红队"
+      ],
+      [
+        "兼容性审核师"
+      ],
+      [
+        "后端设计师"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "后端设计师红队",
+    "skill_path": "roles/后端设计师红队/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "后端设计红队报告",
+        "path": "outputs/review/后端设计红队报告.json"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "后端设计",
+        "path": "outputs/design/后端设计.md"
+      },
+      {
+        "name": "需求确认报告",
+        "path": "outputs/design/需求确认报告.md"
+      },
+      {
+        "name": "后端架构质量原则",
+        "path": "knowledge/后端架构质量原则.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "后端设计师"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "前端设计师",
+    "skill_path": "roles/前端设计师/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "前端设计",
+        "path": "outputs/design/前端设计.md"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "需求确认报告",
+        "path": "outputs/design/需求确认报告.md"
+      },
+      {
+        "name": "需求红队报告",
+        "path": "outputs/design/需求红队报告.json"
+      },
+      {
+        "name": "接口兼容性校验规范",
+        "path": "knowledge/接口兼容性校验规范.md",
+        "type": "knowledge"
+      },
+      {
+        "name": "前端架构质量原则",
+        "path": "knowledge/前端架构质量原则.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "需求红队"
+      ],
+      [
+        "前端设计师红队"
+      ],
+      [
+        "兼容性审核师"
+      ],
+      [
+        "前端设计师"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "前端设计师红队",
+    "skill_path": "roles/前端设计师红队/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "前端设计红队报告",
+        "path": "outputs/review/前端设计红队报告.json"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "前端设计",
+        "path": "outputs/design/前端设计.md"
+      },
+      {
+        "name": "需求确认报告",
+        "path": "outputs/design/需求确认报告.md"
+      },
+      {
+        "name": "前端架构质量原则",
+        "path": "knowledge/前端架构质量原则.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "前端设计师"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "Ext设计师",
+    "skill_path": "roles/Ext设计师/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "Ext设计",
+        "path": "outputs/design/Ext设计.md"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "需求确认报告",
+        "path": "outputs/design/需求确认报告.md"
+      },
+      {
+        "name": "需求红队报告",
+        "path": "outputs/design/需求红队报告.json"
+      },
+      {
+        "name": "接口兼容性校验规范",
+        "path": "knowledge/接口兼容性校验规范.md",
+        "type": "knowledge"
+      },
+      {
+        "name": "扩展架构质量原则",
+        "path": "knowledge/扩展架构质量原则.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "需求红队"
+      ],
+      [
+        "Ext设计师红队"
+      ],
+      [
+        "兼容性审核师"
+      ],
+      [
+        "Ext设计师"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "Ext设计师红队",
+    "skill_path": "roles/Ext设计师红队/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "Ext设计红队报告",
+        "path": "outputs/review/Ext设计红队报告.json"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "Ext设计",
+        "path": "outputs/design/Ext设计.md"
+      },
+      {
+        "name": "需求确认报告",
+        "path": "outputs/design/需求确认报告.md"
+      },
+      {
+        "name": "扩展架构质量原则",
+        "path": "knowledge/扩展架构质量原则.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "Ext设计师"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "兼容性审核师",
+    "skill_path": "roles/兼容性审核师/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "兼容性审核报告",
+        "path": "outputs/review/兼容性审核报告.json"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "数据层设计",
+        "path": "outputs/design/数据层设计.md"
+      },
+      {
+        "name": "后端设计",
+        "path": "outputs/design/后端设计.md"
+      },
+      {
+        "name": "前端设计",
+        "path": "outputs/design/前端设计.md"
+      },
+      {
+        "name": "Ext设计",
+        "path": "outputs/design/Ext设计.md"
+      },
+      {
+        "name": "接口兼容性校验规范",
+        "path": "knowledge/接口兼容性校验规范.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "数据层设计师红队",
+        "后端设计师红队",
+        "前端设计师红队",
+        "Ext设计师红队"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "接口文档撰写者",
+    "skill_path": "roles/接口文档撰写者/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "统一接口文档",
+        "path": "outputs/design/统一接口文档.md"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "数据层设计",
+        "path": "outputs/design/数据层设计.md"
+      },
+      {
+        "name": "后端设计",
+        "path": "outputs/design/后端设计.md"
+      },
+      {
+        "name": "前端设计",
+        "path": "outputs/design/前端设计.md"
+      },
+      {
+        "name": "Ext设计",
+        "path": "outputs/design/Ext设计.md"
+      },
+      {
+        "name": "兼容性审核报告",
+        "path": "outputs/review/兼容性审核报告.json"
+      },
+      {
+        "name": "接口兼容性校验规范",
+        "path": "knowledge/接口兼容性校验规范.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "兼容性审核师"
+      ],
+      [
+        "接口文档红队"
+      ],
+      [
+        "接口文档撰写者"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "接口文档红队",
+    "skill_path": "roles/接口文档红队/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "接口文档红队报告",
+        "path": "outputs/review/接口文档红队报告.json"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "统一接口文档",
+        "path": "outputs/design/统一接口文档.md"
+      },
+      {
+        "name": "数据层设计",
+        "path": "outputs/design/数据层设计.md"
+      },
+      {
+        "name": "后端设计",
+        "path": "outputs/design/后端设计.md"
+      },
+      {
+        "name": "前端设计",
+        "path": "outputs/design/前端设计.md"
+      },
+      {
+        "name": "Ext设计",
+        "path": "outputs/design/Ext设计.md"
+      },
+      {
+        "name": "接口兼容性校验规范",
+        "path": "knowledge/接口兼容性校验规范.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "接口文档撰写者"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "数据层工程师",
+    "skill_path": "roles/数据层工程师/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "数据层实现报告",
+        "path": "outputs/impl/数据层实现报告.md"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "数据层设计",
+        "path": "outputs/design/数据层设计.md"
+      },
+      {
+        "name": "统一接口文档",
+        "path": "outputs/design/统一接口文档.md"
+      },
+      {
+        "name": "数据架构质量原则",
+        "path": "knowledge/数据架构质量原则.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "接口文档红队"
+      ],
+      [
+        "数据层工程师红队"
+      ],
+      [
+        "后端工程师红队"
+      ],
+      [
+        "联调测试师"
+      ],
+      [
+        "数据层工程师"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "数据层工程师红队",
+    "skill_path": "roles/数据层工程师红队/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "数据层实现红队报告",
+        "path": "outputs/review/数据层实现红队报告.json"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "数据层实现报告",
+        "path": "outputs/impl/数据层实现报告.md"
+      },
+      {
+        "name": "数据层设计",
+        "path": "outputs/design/数据层设计.md"
+      },
+      {
+        "name": "数据架构质量原则",
+        "path": "knowledge/数据架构质量原则.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "数据层工程师"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "后端工程师",
+    "skill_path": "roles/后端工程师/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "后端实现报告",
+        "path": "outputs/impl/后端实现报告.md"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "后端设计",
+        "path": "outputs/design/后端设计.md"
+      },
+      {
+        "name": "数据层设计",
+        "path": "outputs/design/数据层设计.md"
+      },
+      {
+        "name": "统一接口文档",
+        "path": "outputs/design/统一接口文档.md"
+      },
+      {
+        "name": "后端架构质量原则",
+        "path": "knowledge/后端架构质量原则.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "数据层工程师红队"
+      ],
+      [
+        "后端工程师红队"
+      ],
+      [
+        "后端工程师"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "后端工程师红队",
+    "skill_path": "roles/后端工程师红队/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "后端实现红队报告",
+        "path": "outputs/review/后端实现红队报告.json"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "后端实现报告",
+        "path": "outputs/impl/后端实现报告.md"
+      },
+      {
+        "name": "后端设计",
+        "path": "outputs/design/后端设计.md"
+      },
+      {
+        "name": "数据层设计",
+        "path": "outputs/design/数据层设计.md"
+      },
+      {
+        "name": "后端架构质量原则",
+        "path": "knowledge/后端架构质量原则.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "后端工程师"
+      ]
+    ],
+    "verdicts": [
+      "confirmed",
+      "fail_data"
+    ]
+  },
+  {
+    "role_name": "前端工程师",
+    "skill_path": "roles/前端工程师/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "前端实现报告",
+        "path": "outputs/impl/前端实现报告.md"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "前端设计",
+        "path": "outputs/design/前端设计.md"
+      },
+      {
+        "name": "统一接口文档",
+        "path": "outputs/design/统一接口文档.md"
+      },
+      {
+        "name": "前端架构质量原则",
+        "path": "knowledge/前端架构质量原则.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "后端工程师红队"
+      ],
+      [
+        "前端工程师红队"
+      ],
+      [
+        "联调测试师"
+      ],
+      [
+        "前端工程师"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "前端工程师红队",
+    "skill_path": "roles/前端工程师红队/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "前端实现红队报告",
+        "path": "outputs/review/前端实现红队报告.json"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "前端实现报告",
+        "path": "outputs/impl/前端实现报告.md"
+      },
+      {
+        "name": "前端设计",
+        "path": "outputs/design/前端设计.md"
+      },
+      {
+        "name": "前端架构质量原则",
+        "path": "knowledge/前端架构质量原则.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "前端工程师"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "Ext工程师",
+    "skill_path": "roles/Ext工程师/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "Ext实现报告",
+        "path": "outputs/impl/Ext实现报告.md"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "Ext设计",
+        "path": "outputs/design/Ext设计.md"
+      },
+      {
+        "name": "统一接口文档",
+        "path": "outputs/design/统一接口文档.md"
+      },
+      {
+        "name": "扩展架构质量原则",
+        "path": "knowledge/扩展架构质量原则.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "后端工程师红队"
+      ],
+      [
+        "Ext工程师红队"
+      ],
+      [
+        "联调测试师"
+      ],
+      [
+        "Ext工程师"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "Ext工程师红队",
+    "skill_path": "roles/Ext工程师红队/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "Ext实现红队报告",
+        "path": "outputs/review/Ext实现红队报告.json"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "Ext实现报告",
+        "path": "outputs/impl/Ext实现报告.md"
+      },
+      {
+        "name": "Ext设计",
+        "path": "outputs/design/Ext设计.md"
+      },
+      {
+        "name": "扩展架构质量原则",
+        "path": "knowledge/扩展架构质量原则.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "Ext工程师"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "单元测试工程师",
+    "skill_path": "roles/单元测试工程师/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "单元测试报告",
+        "path": "outputs/test/单元测试报告.md"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "数据层实现报告",
+        "path": "outputs/impl/数据层实现报告.md"
+      },
+      {
+        "name": "后端实现报告",
+        "path": "outputs/impl/后端实现报告.md"
+      },
+      {
+        "name": "前端实现报告",
+        "path": "outputs/impl/前端实现报告.md"
+      },
+      {
+        "name": "Ext实现报告",
+        "path": "outputs/impl/Ext实现报告.md"
+      },
+      {
+        "name": "统一接口文档",
+        "path": "outputs/design/统一接口文档.md"
+      },
+      {
+        "name": "单元测试质量原则",
+        "path": "knowledge/单元测试质量原则.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "前端工程师红队",
+        "Ext工程师红队"
+      ],
+      [
+        "单元测试工程师红队"
+      ],
+      [
+        "单元测试工程师"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "单元测试工程师红队",
+    "skill_path": "roles/单元测试工程师红队/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "单元测试红队报告",
+        "path": "outputs/review/单元测试红队报告.json"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "单元测试报告",
+        "path": "outputs/test/单元测试报告.md"
+      },
+      {
+        "name": "数据层实现报告",
+        "path": "outputs/impl/数据层实现报告.md"
+      },
+      {
+        "name": "后端实现报告",
+        "path": "outputs/impl/后端实现报告.md"
+      },
+      {
+        "name": "前端实现报告",
+        "path": "outputs/impl/前端实现报告.md"
+      },
+      {
+        "name": "Ext实现报告",
+        "path": "outputs/impl/Ext实现报告.md"
+      },
+      {
+        "name": "单元测试质量原则",
+        "path": "knowledge/单元测试质量原则.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "单元测试工程师"
+      ]
+    ],
+    "verdicts": [
+      "confirmed"
+    ]
+  },
+  {
+    "role_name": "联调测试师",
+    "skill_path": "roles/联调测试师/skill.md",
+    "blocking_mode": "auto",
+    "outputs": [
+      {
+        "name": "联调测试报告",
+        "path": "outputs/test/联调测试报告.json"
+      }
+    ],
+    "gate_rules": {
+      "phase1_cross_validation": {
+        "enabled": true
+      },
+      "phase2_schema_comparison": {
+        "enabled": false
+      },
+      "phase3_anomaly_detection": {
+        "enabled": false
+      }
+    },
+    "inputs": [
+      {
+        "name": "需求确认报告",
+        "path": "outputs/design/需求确认报告.md"
+      },
+      {
+        "name": "统一接口文档",
+        "path": "outputs/design/统一接口文档.md"
+      },
+      {
+        "name": "数据层实现报告",
+        "path": "outputs/impl/数据层实现报告.md"
+      },
+      {
+        "name": "后端实现报告",
+        "path": "outputs/impl/后端实现报告.md"
+      },
+      {
+        "name": "前端实现报告",
+        "path": "outputs/impl/前端实现报告.md"
+      },
+      {
+        "name": "Ext实现报告",
+        "path": "outputs/impl/Ext实现报告.md"
+      },
+      {
+        "name": "联调测试指南",
+        "path": "knowledge/联调测试指南.md",
+        "type": "knowledge"
+      }
+    ],
+    "input_groups": [
+      [
+        "单元测试工程师红队"
+      ]
+    ],
+    "verdicts": [
+      "confirmed",
+      "fail_deep"
+    ]
+  }
+]

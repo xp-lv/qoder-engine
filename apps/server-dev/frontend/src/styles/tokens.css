@@ -1,0 +1,67 @@
+/* ==========================================================================
+   设计系统 Token —— 全站唯一的设计令牌源（质量原则第 1 原则）
+   引用来源：前端设计 §1.1。所有样式值引用 Token，禁止散落魔法数字。
+   ========================================================================== */
+:root {
+  /* ===== 色彩（1 主色 + 语义色，配色 ≤ 3 主色）===== */
+  --color-primary: #4F46E5;            /* 主色：靛蓝——监控/信任语义 */
+  --color-primary-hover: #4338CA;
+  --color-primary-muted: #EEF2FF;
+
+  --color-text: #1F2937;               /* 正文（非纯黑 #000，避免视觉疲劳）*/
+  --color-text-secondary: #6B7280;     /* 次要文字 */
+  --color-text-disabled: #9CA3AF;
+
+  --color-bg: #FFFFFF;                 /* 页面底色 */
+  --color-bg-muted: #F9FAFB;           /* 卡片间隙/分区底色 */
+  --color-bg-elevated: #FFFFFF;        /* 卡片/浮层底色 */
+  --color-border: #E5E7EB;
+
+  /* 语义色——与 qoder status 枚举一一对应 */
+  --color-success: #10B981;            /* running 运行中 */
+  --color-warning: #F59E0B;            /* idle 空闲 */
+  --color-danger: #EF4444;             /* error 异常 */
+  --color-neutral: #9CA3AF;            /* stale/offline 离线（R-002 修正）*/
+
+  /* 语义色文字变体——用于浅色块上的状态文字，确保对比度 ≥ 4.5:1（WCAG AA，红队 FI-004）。
+     圆点等图形元素仍用上面的饱和语义色（图形 3:1 即可），文字改用更深的变体。 */
+  --color-success-text: #047857;       /* emerald-700：running 文字（对白底 ≈ 4.6:1）*/
+  --color-warning-text: #B45309;       /* amber-700：idle 文字（对白底 ≈ 4.5:1）*/
+  --color-danger-text: #B91C1C;        /* red-700：error 文字（对白底 ≈ 5.2:1）*/
+  --color-neutral-text: #6B7280;       /* 次要文字色：stale 文字（对白底 ≈ 4.6:1）*/
+
+  /* ===== 字体（正文 + 等宽，共 2 种）===== */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Fira Code', 'JetBrains Mono', monospace;  /* 指标数值用等宽 */
+
+  --text-xs: 0.75rem;    /* 12px 辅助/徽标 */
+  --text-sm: 0.875rem;   /* 14px 次要正文 */
+  --text-base: 1rem;     /* 16px 正文 */
+  --text-lg: 1.125rem;   /* 18px 卡片标题 */
+  --text-xl: 1.25rem;    /* 20px 页面副标题 */
+  --text-2xl: 1.5rem;    /* 24px 页面主标题 */
+
+  /* ===== 间距（8px 栅格系统）===== */
+  --space-1: 0.25rem;  /* 4px */
+  --space-2: 0.5rem;   /* 8px */
+  --space-3: 0.75rem;  /* 12px */
+  --space-4: 1rem;     /* 16px */
+  --space-6: 1.5rem;   /* 24px */
+  --space-8: 2rem;     /* 32px */
+  --space-12: 3rem;    /* 48px 留白呼吸 */
+
+  /* ===== 圆角 ===== */
+  --radius-sm: 4px;    /* 徽标 */
+  --radius-md: 8px;    /* 按钮/输入框 */
+  --radius-lg: 12px;   /* 卡片 */
+
+  /* ===== 阴影 ===== */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+
+  /* ===== z-index 层级（避免混乱）===== */
+  --z-dropdown: 1000;
+  --z-modal: 2000;
+  --z-toast: 3000;
+}

@@ -1,0 +1,31 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--text-sm);
+  color: var(--color-primary);
+  align-self: flex-start;
+  min-height: 44px; /* 可访问性：交互区域 ≥ 44px */
+}
+
+.back:hover {
+  color: var(--color-primary-hover);
+}
+
+.heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  word-break: break-all;
+}
+
+.skeletonTable {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}

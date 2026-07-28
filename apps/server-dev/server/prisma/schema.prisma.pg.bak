@@ -1,0 +1,52 @@
+// Prisma 5 schema — 遵循需求确认报告 §1 技术栈选型
+// 字段命名策略：模型字段用 camelCase（TypeScript 惯例），数据库列用 snake_case（PostgreSQL 惯例），
+// 通过 @map / @@map 桥接，确保接口兼容性校验规范中"字段名一致性"检查通过。
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL") // 环境变量注入，启动时 fail-fast 校验（见 db/config/database.ts）
+}
+
+/// 状态查找表（report_status）—— 遵循质量原则第 2 原则：枚举用查找表而非 CHECK 约束
+model ReportStatus {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique @db.VarChar(20) // 状态码：running / idle / error
+  label     String   @db.VarChar(50) // 显示标签：运行中 / 空闲 / 错误
+  sortOrder Int      @map("sort_order") @default(0) // 排序权重
+  createdAt DateTime @map("created_at") @default(now()) // 审计：创建时间
+  updatedAt DateTime @map("updated_at") @default(now()) // 审计：更新时间
+
+  qoderReports QoderReport[]
+
+  @@map("report_status")
+}
+
+/// qoder 上报记录（qoder_report）—— 核心实体，append-only
+/// 每次 Ext 上报插入一行，不更新、不删除（软删除仅用于数据保留归档）
+model QoderReport {
+  id             Int       @id @default(autoincrement()) // 记录唯一标识 (SERIAL)
+  instanceId     String    @map("instance_id") @db.VarChar(36) // Ext 端生成的 UUID 实例标识
+  hostname       String    @db.VarChar(255) // 上报机器主机名
+  qoderVersion   String    @map("qoder_version") @db.VarChar(50) // qoder 版本号（如 1.4.0）
+  statusId       Int       @map("status_id") // 运行状态外键 → report_status(id)
+  uptime         Int?      @db.Integer // qoder 运行时长（秒），可空，CHECK (>= 0)
+  cpuUsage       Float?    @map("cpu_usage") @db.DoublePrecision // CPU 使用率（%），可空，CHECK (BETWEEN 0 AND 100)
+  memUsage       Float?    @map("mem_usage") @db.DoublePrecision // 内存使用率（%），可空，CHECK (BETWEEN 0 AND 100)
+  workspaceCount Int?      @map("workspace_count") @db.Integer // 工作区数量，可空，CHECK (>= 0)
+  reportedAt     DateTime  @map("reported_at") // Ext 端上报时间（UTC 存储）
+  createdAt      DateTime  @map("created_at") @default(now()) // 服务器接收时间（审计）
+  updatedAt      DateTime  @map("updated_at") @default(now()) // 审计字段（append-only 表中恒等于 created_at）
+  deletedAt      DateTime? @map("deleted_at") // 软删除标记（仅用于数据保留归档）
+
+  // 外键关系：ON DELETE RESTRICT —— 禁止删除被引用的状态码（质量红线：外键关系不留孤儿记录）
+  status ReportStatus @relation(fields: [statusId], references: [id], onDelete: Restrict)
+
+  // 复合索引：覆盖高频查询（历史分页 + 最新状态聚合 + 离线检测）
+  // 区分度从高到低排列：instance_id 区分度高（≤100 实例），reported_at 作为排序键放第二位
+  @@index([instanceId, reportedAt(sort: Desc)], map: "idx_qoder_report_instance_reported")
+  @@map("qoder_report")
+}

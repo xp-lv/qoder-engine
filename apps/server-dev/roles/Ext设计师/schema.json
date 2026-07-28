@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {},
+  "required": [],
+  "_required_files": [
+    {
+      "name": "Ext设计",
+      "path": "outputs/design/Ext设计.md",
+      "contract": {
+        "min_lines": 20,
+        "required_headings": [
+          "## 2. 扩展结构",
+          "## 3. 后端 API 调用"
+        ]
+      }
+    }
+  ]
+}

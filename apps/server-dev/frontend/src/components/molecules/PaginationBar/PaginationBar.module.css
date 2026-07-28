@@ -1,0 +1,13 @@
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  padding: var(--space-4) 0;
+}
+
+.bar strong {
+  color: var(--color-primary);
+  font-weight: 600;
+}

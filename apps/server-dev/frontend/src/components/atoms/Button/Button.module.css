@@ -1,0 +1,37 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 44px; /* 可访问性：交互区域 ≥ 44px */
+  padding: var(--space-2) var(--space-6);
+  font-size: var(--text-base);
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.primary {
+  color: var(--color-bg);
+  background: var(--color-primary);
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.secondary {
+  color: var(--color-primary);
+  background: var(--color-primary-muted);
+  border-color: var(--color-border);
+}
+
+.secondary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--color-primary-muted));
+}

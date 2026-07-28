@@ -1,0 +1,345 @@
+app_name: server-dev
+
+# ═══════════════════════════════════════════════════════════════
+# server-dev v3 — 四层红队对抗架构（质量把控增强版）
+#
+# 核心改进（相比 v2）:
+#   v2 改进保留: 串行链 + 技术栈前置 + 目录隔离
+#   v3 新增: 每个设计师/工程师后插入专属红队，形成对抗式质量审查
+#     - L2 设计层: 4 设计师 → 4 设计红队（专业质量维度对抗）
+#     - L5 执行层: 4 工程师 → 4 工程红队（代码质量维度对抗）
+#
+# 编排拓扑:
+#   L1:  需求确认师(含技术栈) → 需求红队
+#   L2:  FORK[4 设计师 → 4 设计红队] → JOIN → 兼容性审核师
+#   L3:  接口文档撰写者 → 接口文档红队
+#   L4:  数据层工程师→红队 → 后端工程师→红队 → FORK[前端→红队 ∥ Ext→红队] → JOIN
+#   L4.5: 单元测试工程师→红队
+#   L5:  联调测试师 → 完成
+#
+# 红队质量维度:
+#   数据层设计师红队: 范式合规/索引覆盖/扩展性/字段约束
+#   后端设计师红队:   RESTful规范/幂等性/错误码/认证完备性
+#   前端设计师红队:   美学与UX/组件化/响应式/交互一致性
+#   Ext设计师红队:    plugin.json规范/hooks生命周期/采集真实性/进程安全性
+#   数据层工程师红队: SQL质量/迁移脚本/事务完整性/代码与设计一致性
+#   后端工程师红队:   安全性/错误处理/分层规范/代码与设计一致性
+#   前端工程师红队:   代码质量/性能/可访问性/样式规范
+#   Ext工程师红队:    进程生命周期/采集真实性/上报通信/插件规范一致性
+#   单元测试工程师红队: 覆盖率盲区/断言有效性/Mock适度性/隔离性与AAA
+#
+# §3 控制流回退
+#   a) 需求红队 fail → 回退需求确认师 (max 3)
+#   b) 设计红队 fail → 回退对应设计师 (max 3)
+#   c) 兼容性审核 fail → 回退 4 设计师 (max 5)
+#   d) 接口文档红队 fail → 回退接口文档撰写者 (max 3)
+#   e) 实现红队 fail → 回退对应工程师 (max 3)
+#   f) 后端工程师红队 fail_data → 回退数据层工程师 (max 2)
+#   g) 联调测试 fail → 回退 FORK[前端∥Ext] (max 3)
+#   h) 联调测试 fail_deep → 回退数据层工程师 (max 2)，级联重做整条 L4 链
+#   i) 单元测试红队 fail → 回退单元测试工程师 (max 3)
+# ═══════════════════════════════════════════════════════════════
+
+knowledge:
+  - 需求闭环准则: knowledge/需求闭环准则.md
+    inject_to: [需求确认师, 需求红队]
+  - 接口兼容性校验规范: knowledge/接口兼容性校验规范.md
+    inject_to: [数据层设计师, 后端设计师, 前端设计师, Ext设计师, 兼容性审核师, 接口文档撰写者, 接口文档红队]
+  - 联调测试指南: knowledge/联调测试指南.md
+    inject_to: [联调测试师]
+  # ═══ 质量原则知识（v3 新增，高维度指导注入）═══
+  - 数据架构质量原则: knowledge/数据架构质量原则.md
+    inject_to: [数据层设计师, 数据层工程师, 数据层设计师红队, 数据层工程师红队]
+  - 后端架构质量原则: knowledge/后端架构质量原则.md
+    inject_to: [后端设计师, 后端工程师, 后端设计师红队, 后端工程师红队]
+  - 前端架构质量原则: knowledge/前端架构质量原则.md
+    inject_to: [前端设计师, 前端工程师, 前端设计师红队, 前端工程师红队]
+  - 扩展架构质量原则: knowledge/扩展架构质量原则.md
+    inject_to: [Ext设计师, Ext工程师, Ext设计师红队, Ext工程师红队]
+  - 单元测试质量原则: knowledge/单元测试质量原则.md
+    inject_to: [单元测试工程师, 单元测试工程师红队]
+
+roles:
+  # ═══ L1 需求层 ═══
+  需求确认师:
+    confirm: manual
+    inputs:
+      - 用户需求: 00-需求描述.md
+    outputs:
+      - 需求确认报告: outputs/design/需求确认报告.md
+
+  需求红队:
+    confirm: auto
+    inputs:
+      - 需求确认报告: outputs/design/需求确认报告.md
+    outputs:
+      - 需求红队报告: outputs/design/需求红队报告.json
+
+  # ═══ L2 设计层（FORK + 专属红队对抗）═══
+  数据层设计师:
+    confirm: auto
+    inputs:
+      - 需求确认报告: outputs/design/需求确认报告.md
+      - 需求红队报告: outputs/design/需求红队报告.json
+    outputs:
+      - 数据层设计: outputs/design/数据层设计.md
+
+  数据层设计师红队:
+    confirm: auto
+    inputs:
+      - 数据层设计: outputs/design/数据层设计.md
+      - 需求确认报告: outputs/design/需求确认报告.md
+    outputs:
+      - 数据层设计红队报告: outputs/review/数据层设计红队报告.json
+
+  后端设计师:
+    confirm: auto
+    inputs:
+      - 需求确认报告: outputs/design/需求确认报告.md
+      - 需求红队报告: outputs/design/需求红队报告.json
+    outputs:
+      - 后端设计: outputs/design/后端设计.md
+
+  后端设计师红队:
+    confirm: auto
+    inputs:
+      - 后端设计: outputs/design/后端设计.md
+      - 需求确认报告: outputs/design/需求确认报告.md
+    outputs:
+      - 后端设计红队报告: outputs/review/后端设计红队报告.json
+
+  前端设计师:
+    confirm: auto
+    inputs:
+      - 需求确认报告: outputs/design/需求确认报告.md
+      - 需求红队报告: outputs/design/需求红队报告.json
+    outputs:
+      - 前端设计: outputs/design/前端设计.md
+
+  前端设计师红队:
+    confirm: auto
+    inputs:
+      - 前端设计: outputs/design/前端设计.md
+      - 需求确认报告: outputs/design/需求确认报告.md
+    outputs:
+      - 前端设计红队报告: outputs/review/前端设计红队报告.json
+
+  Ext设计师:
+    confirm: auto
+    inputs:
+      - 需求确认报告: outputs/design/需求确认报告.md
+      - 需求红队报告: outputs/design/需求红队报告.json
+    outputs:
+      - Ext设计: outputs/design/Ext设计.md
+
+  Ext设计师红队:
+    confirm: auto
+    inputs:
+      - Ext设计: outputs/design/Ext设计.md
+      - 需求确认报告: outputs/design/需求确认报告.md
+    outputs:
+      - Ext设计红队报告: outputs/review/Ext设计红队报告.json
+
+  # ═══ L3 审核层 + 契约层 ═══
+  兼容性审核师:
+    confirm: auto
+    inputs:
+      - 数据层设计: outputs/design/数据层设计.md
+      - 后端设计: outputs/design/后端设计.md
+      - 前端设计: outputs/design/前端设计.md
+      - Ext设计: outputs/design/Ext设计.md
+    outputs:
+      - 兼容性审核报告: outputs/review/兼容性审核报告.json
+
+  接口文档撰写者:
+    confirm: auto
+    inputs:
+      - 数据层设计: outputs/design/数据层设计.md
+      - 后端设计: outputs/design/后端设计.md
+      - 前端设计: outputs/design/前端设计.md
+      - Ext设计: outputs/design/Ext设计.md
+      - 兼容性审核报告: outputs/review/兼容性审核报告.json
+    outputs:
+      - 统一接口文档: outputs/design/统一接口文档.md
+
+  接口文档红队:
+    confirm: auto
+    inputs:
+      - 统一接口文档: outputs/design/统一接口文档.md
+      - 数据层设计: outputs/design/数据层设计.md
+      - 后端设计: outputs/design/后端设计.md
+      - 前端设计: outputs/design/前端设计.md
+      - Ext设计: outputs/design/Ext设计.md
+    outputs:
+      - 接口文档红队报告: outputs/review/接口文档红队报告.json
+
+  # ═══ L4 执行层（串行链 + 专属红队对抗）═══
+  # 数据层先执行 → 红队审查 → 后端依赖数据层代码 → 红队审查 → FORK[前端∥Ext] → 各自红队审查
+  数据层工程师:
+    confirm: auto
+    inputs:
+      - 数据层设计: outputs/design/数据层设计.md
+      - 统一接口文档: outputs/design/统一接口文档.md
+    outputs:
+      - 数据层实现报告: outputs/impl/数据层实现报告.md
+    writes_to: server/db/
+
+  数据层工程师红队:
+    confirm: auto
+    inputs:
+      - 数据层实现报告: outputs/impl/数据层实现报告.md
+      - 数据层设计: outputs/design/数据层设计.md
+    outputs:
+      - 数据层实现红队报告: outputs/review/数据层实现红队报告.json
+
+  后端工程师:
+    confirm: auto
+    inputs:
+      - 后端设计: outputs/design/后端设计.md
+      - 数据层设计: outputs/design/数据层设计.md
+      - 统一接口文档: outputs/design/统一接口文档.md
+    outputs:
+      - 后端实现报告: outputs/impl/后端实现报告.md
+    writes_to: server/api/
+
+  后端工程师红队:
+    confirm: auto
+    inputs:
+      - 后端实现报告: outputs/impl/后端实现报告.md
+      - 后端设计: outputs/design/后端设计.md
+      - 数据层设计: outputs/design/数据层设计.md
+    outputs:
+      - 后端实现红队报告: outputs/review/后端实现红队报告.json
+
+  前端工程师:
+    confirm: auto
+    inputs:
+      - 前端设计: outputs/design/前端设计.md
+      - 统一接口文档: outputs/design/统一接口文档.md
+    outputs:
+      - 前端实现报告: outputs/impl/前端实现报告.md
+    writes_to: frontend/
+
+  前端工程师红队:
+    confirm: auto
+    inputs:
+      - 前端实现报告: outputs/impl/前端实现报告.md
+      - 前端设计: outputs/design/前端设计.md
+    outputs:
+      - 前端实现红队报告: outputs/review/前端实现红队报告.json
+
+  Ext工程师:
+    confirm: auto
+    inputs:
+      - Ext设计: outputs/design/Ext设计.md
+      - 统一接口文档: outputs/design/统一接口文档.md
+    outputs:
+      - Ext实现报告: outputs/impl/Ext实现报告.md
+    writes_to: extension/
+
+  Ext工程师红队:
+    confirm: auto
+    inputs:
+      - Ext实现报告: outputs/impl/Ext实现报告.md
+      - Ext设计: outputs/design/Ext设计.md
+    outputs:
+      - Ext实现红队报告: outputs/review/Ext实现红队报告.json
+
+  # ═══ L4.5 单元测试层（★ 新增测试能力）═══
+  单元测试工程师:
+    confirm: auto
+    inputs:
+      - 数据层实现报告: outputs/impl/数据层实现报告.md
+      - 后端实现报告: outputs/impl/后端实现报告.md
+      - 前端实现报告: outputs/impl/前端实现报告.md
+      - Ext实现报告: outputs/impl/Ext实现报告.md
+      - 统一接口文档: outputs/design/统一接口文档.md
+    outputs:
+      - 单元测试报告: outputs/test/单元测试报告.md
+
+  单元测试工程师红队:
+    confirm: auto
+    inputs:
+      - 单元测试报告: outputs/test/单元测试报告.md
+      - 数据层实现报告: outputs/impl/数据层实现报告.md
+      - 后端实现报告: outputs/impl/后端实现报告.md
+      - 前端实现报告: outputs/impl/前端实现报告.md
+      - Ext实现报告: outputs/impl/Ext实现报告.md
+    outputs:
+      - 单元测试红队报告: outputs/review/单元测试红队报告.json
+
+  # ═══ L5 联调层 ═══
+  联调测试师:
+    confirm: auto
+    inputs:
+      - 需求确认报告: outputs/design/需求确认报告.md
+      - 统一接口文档: outputs/design/统一接口文档.md
+      - 数据层实现报告: outputs/impl/数据层实现报告.md
+      - 后端实现报告: outputs/impl/后端实现报告.md
+      - 前端实现报告: outputs/impl/前端实现报告.md
+      - Ext实现报告: outputs/impl/Ext实现报告.md
+    outputs:
+      - 联调测试报告: outputs/test/联调测试报告.json
+
+edges:
+  # ═══ L1: 需求确认 → 需求红队 ═══
+  - 需求确认师 → 需求红队
+  - 需求红队 → 需求确认师 when: result.verdict == "fail" max_executions: 3
+
+  # ═══ L1 → L2 (FORK): 需求红队 → 并行设计 ═══
+  - 需求红队 → [数据层设计师, 后端设计师, 前端设计师, Ext设计师] when: result.verdict == "confirmed"
+
+  # ═══ L2 设计师 → 专属红队（★ v3 新增对抗）═══
+  - 数据层设计师 → 数据层设计师红队
+  - 后端设计师 → 后端设计师红队
+  - 前端设计师 → 前端设计师红队
+  - Ext设计师 → Ext设计师红队
+
+  # ═══ L2 红队 fail → 回退对应设计师 ═══
+  - 数据层设计师红队 → 数据层设计师 when: result.verdict == "fail" max_executions: 3
+  - 后端设计师红队 → 后端设计师 when: result.verdict == "fail" max_executions: 3
+  - 前端设计师红队 → 前端设计师 when: result.verdict == "fail" max_executions: 3
+  - Ext设计师红队 → Ext设计师 when: result.verdict == "fail" max_executions: 3
+
+  # ═══ L2 → L3 (JOIN): 4 设计红队 → 兼容性审核 ═══
+  - [数据层设计师红队, 后端设计师红队, 前端设计师红队, Ext设计师红队] → 兼容性审核师
+
+  # ═══ L3 审核层 → 契约层 ═══
+  - 兼容性审核师 → 接口文档撰写者 when: result.verdict == "confirmed"
+  - 兼容性审核师 → [数据层设计师, 后端设计师, 前端设计师, Ext设计师] when: result.verdict == "fail" max_executions: 5
+
+  # ═══ L3.5 接口契约层 ═══
+  - 接口文档撰写者 → 接口文档红队
+  - 接口文档红队 → 数据层工程师 when: result.verdict == "confirmed"
+  - 接口文档红队 → 接口文档撰写者 when: result.verdict == "fail" max_executions: 3
+
+  # ═══ L4 串行执行链 + 红队对抗（★ v3 改造）═══
+  - 数据层工程师 → 数据层工程师红队
+  - 数据层工程师红队 → 数据层工程师 when: result.verdict == "fail" max_executions: 3
+  - 数据层工程师红队 → 后端工程师 when: result.verdict == "confirmed"
+
+  - 后端工程师 → 后端工程师红队
+  - 后端工程师红队 → 后端工程师 when: result.verdict == "fail" max_executions: 3
+  - 后端工程师红队 → 数据层工程师 when: result.verdict == "fail_data" max_executions: 2
+  - 后端工程师红队 → [前端工程师, Ext工程师] when: result.verdict == "confirmed"
+
+  - 前端工程师 → 前端工程师红队
+  - 前端工程师红队 → 前端工程师 when: result.verdict == "fail" max_executions: 3
+
+  - Ext工程师 → Ext工程师红队
+  - Ext工程师红队 → Ext工程师 when: result.verdict == "fail" max_executions: 3
+
+  # ═══ L4 → L4.5 (JOIN): 前端红队+Ext红队 → 单元测试 ═══
+  - [前端工程师红队, Ext工程师红队] → 单元测试工程师
+
+  # ═══ L4.5 单元测试层（★ 新增）═══
+  - 单元测试工程师 → 单元测试工程师红队
+  - 单元测试工程师红队 → 单元测试工程师 when: result.verdict == "fail" max_executions: 3
+
+  # ═══ L4.5 → L5: 测试红队 → 联调测试 ═══
+  - 单元测试工程师红队 → 联调测试师 when: result.verdict == "confirmed"
+
+  # ═══ L5 联调测试师 ═══
+  - 联调测试师 → 完成 when: result.verdict == "confirmed"
+  - 联调测试师 → [前端工程师, Ext工程师] when: result.verdict == "fail" max_executions: 3
+  - 联调测试师 → 数据层工程师 when: result.verdict == "fail_deep" max_executions: 2

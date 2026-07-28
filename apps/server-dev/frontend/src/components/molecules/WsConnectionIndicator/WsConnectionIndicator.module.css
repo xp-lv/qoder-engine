@@ -1,0 +1,46 @@
+.indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.text {
+  white-space: nowrap;
+}
+
+.success {
+  background: var(--color-success);
+}
+
+.warning {
+  background: var(--color-warning);
+  animation: pulse 1.2s infinite ease-in-out;
+}
+
+.danger {
+  background: var(--color-danger);
+}
+
+.neutral {
+  background: var(--color-neutral);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}

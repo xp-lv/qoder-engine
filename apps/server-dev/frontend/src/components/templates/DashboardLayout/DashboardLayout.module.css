@@ -1,0 +1,20 @@
+.layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--color-bg-muted);
+}
+
+.main {
+  flex: 1;
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  /* 留白即呼吸（质量原则第 2 原则）：页面外边距 --space-8（32px） */
+  padding: var(--space-8);
+}
+
+/* 跳转主内容的无障碍链接锚点（skip link） */
+.main:focus {
+  outline: none;
+}

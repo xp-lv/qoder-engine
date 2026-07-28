@@ -1,0 +1,573 @@
+{
+  "schema_version": "2.0",
+  "entry": "需求确认师",
+  "steps": [
+    {
+      "step": "需求确认师",
+      "role": "需求确认师",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "需求红队"
+          ],
+          "type": "normal"
+        },
+        "fail": {
+          "targets": [
+            "需求确认师"
+          ],
+          "type": "backward",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "outputs/design/需求确认报告.md"
+            },
+            {
+              "path": "outputs/需求确认师-gate-result.json"
+            },
+            {
+              "path": "outputs/需求确认师-feedback.json"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "需求红队",
+      "role": "需求红队",
+      "transitions": {
+        "fail": {
+          "targets": [
+            "需求确认师"
+          ],
+          "type": "backward",
+          "max_executions": 3
+        },
+        "confirmed": {
+          "targets": [
+            "数据层设计师",
+            "后端设计师",
+            "前端设计师",
+            "Ext设计师"
+          ],
+          "type": "normal"
+        }
+      }
+    },
+    {
+      "step": "数据层设计师",
+      "role": "数据层设计师",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "数据层设计师红队"
+          ],
+          "type": "normal"
+        },
+        "fail": {
+          "targets": [
+            "数据层设计师"
+          ],
+          "type": "backward",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "outputs/design/数据层设计.md"
+            },
+            {
+              "path": "outputs/数据层设计师-gate-result.json"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "数据层设计师红队",
+      "role": "数据层设计师红队",
+      "transitions": {
+        "fail": {
+          "targets": [
+            "数据层设计师"
+          ],
+          "type": "backward",
+          "max_executions": 3
+        },
+        "confirmed": {
+          "targets": [
+            "兼容性审核师"
+          ],
+          "type": "normal"
+        }
+      }
+    },
+    {
+      "step": "后端设计师",
+      "role": "后端设计师",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "后端设计师红队"
+          ],
+          "type": "normal"
+        },
+        "fail": {
+          "targets": [
+            "后端设计师"
+          ],
+          "type": "backward",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "outputs/design/后端设计.md"
+            },
+            {
+              "path": "outputs/后端设计师-gate-result.json"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "后端设计师红队",
+      "role": "后端设计师红队",
+      "transitions": {
+        "fail": {
+          "targets": [
+            "后端设计师"
+          ],
+          "type": "backward",
+          "max_executions": 3
+        },
+        "confirmed": {
+          "targets": [
+            "兼容性审核师"
+          ],
+          "type": "normal"
+        }
+      }
+    },
+    {
+      "step": "前端设计师",
+      "role": "前端设计师",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "前端设计师红队"
+          ],
+          "type": "normal"
+        },
+        "fail": {
+          "targets": [
+            "前端设计师"
+          ],
+          "type": "backward",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "outputs/design/前端设计.md"
+            },
+            {
+              "path": "outputs/前端设计师-gate-result.json"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "前端设计师红队",
+      "role": "前端设计师红队",
+      "transitions": {
+        "fail": {
+          "targets": [
+            "前端设计师"
+          ],
+          "type": "backward",
+          "max_executions": 3
+        },
+        "confirmed": {
+          "targets": [
+            "兼容性审核师"
+          ],
+          "type": "normal"
+        }
+      }
+    },
+    {
+      "step": "Ext设计师",
+      "role": "Ext设计师",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "Ext设计师红队"
+          ],
+          "type": "normal"
+        },
+        "fail": {
+          "targets": [
+            "Ext设计师"
+          ],
+          "type": "backward",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "outputs/design/Ext设计.md"
+            },
+            {
+              "path": "outputs/Ext设计师-gate-result.json"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "Ext设计师红队",
+      "role": "Ext设计师红队",
+      "transitions": {
+        "fail": {
+          "targets": [
+            "Ext设计师"
+          ],
+          "type": "backward",
+          "max_executions": 3
+        },
+        "confirmed": {
+          "targets": [
+            "兼容性审核师"
+          ],
+          "type": "normal"
+        }
+      }
+    },
+    {
+      "step": "兼容性审核师",
+      "role": "兼容性审核师",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "接口文档撰写者"
+          ],
+          "type": "normal"
+        },
+        "fail": {
+          "targets": [
+            "数据层设计师",
+            "后端设计师",
+            "前端设计师",
+            "Ext设计师"
+          ],
+          "type": "backward",
+          "max_executions": 5
+        }
+      }
+    },
+    {
+      "step": "接口文档撰写者",
+      "role": "接口文档撰写者",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "接口文档红队"
+          ],
+          "type": "normal"
+        },
+        "fail": {
+          "targets": [
+            "接口文档撰写者"
+          ],
+          "type": "backward",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "outputs/design/统一接口文档.md"
+            },
+            {
+              "path": "outputs/接口文档撰写者-gate-result.json"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "接口文档红队",
+      "role": "接口文档红队",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "数据层工程师"
+          ],
+          "type": "normal"
+        },
+        "fail": {
+          "targets": [
+            "接口文档撰写者"
+          ],
+          "type": "backward",
+          "max_executions": 3
+        }
+      }
+    },
+    {
+      "step": "数据层工程师",
+      "role": "数据层工程师",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "数据层工程师红队"
+          ],
+          "type": "normal"
+        },
+        "fail": {
+          "targets": [
+            "数据层工程师"
+          ],
+          "type": "backward",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "outputs/impl/数据层实现报告.md"
+            },
+            {
+              "path": "outputs/数据层工程师-gate-result.json"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "数据层工程师红队",
+      "role": "数据层工程师红队",
+      "transitions": {
+        "fail": {
+          "targets": [
+            "数据层工程师"
+          ],
+          "type": "backward",
+          "max_executions": 3
+        },
+        "confirmed": {
+          "targets": [
+            "后端工程师"
+          ],
+          "type": "normal"
+        }
+      }
+    },
+    {
+      "step": "后端工程师",
+      "role": "后端工程师",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "后端工程师红队"
+          ],
+          "type": "normal"
+        },
+        "fail": {
+          "targets": [
+            "后端工程师"
+          ],
+          "type": "backward",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "outputs/impl/后端实现报告.md"
+            },
+            {
+              "path": "outputs/后端工程师-gate-result.json"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "后端工程师红队",
+      "role": "后端工程师红队",
+      "transitions": {
+        "fail": {
+          "targets": [
+            "后端工程师"
+          ],
+          "type": "backward",
+          "max_executions": 3
+        },
+        "fail_data": {
+          "targets": [
+            "数据层工程师"
+          ],
+          "type": "backward",
+          "max_executions": 2
+        },
+        "confirmed": {
+          "targets": [
+            "前端工程师",
+            "Ext工程师"
+          ],
+          "type": "normal"
+        }
+      }
+    },
+    {
+      "step": "前端工程师",
+      "role": "前端工程师",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "前端工程师红队"
+          ],
+          "type": "normal"
+        },
+        "fail": {
+          "targets": [
+            "前端工程师"
+          ],
+          "type": "backward",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "outputs/impl/前端实现报告.md"
+            },
+            {
+              "path": "outputs/前端工程师-gate-result.json"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "前端工程师红队",
+      "role": "前端工程师红队",
+      "transitions": {
+        "fail": {
+          "targets": [
+            "前端工程师"
+          ],
+          "type": "backward",
+          "max_executions": 3
+        },
+        "confirmed": {
+          "targets": [
+            "单元测试工程师"
+          ],
+          "type": "normal"
+        }
+      }
+    },
+    {
+      "step": "Ext工程师",
+      "role": "Ext工程师",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "Ext工程师红队"
+          ],
+          "type": "normal"
+        },
+        "fail": {
+          "targets": [
+            "Ext工程师"
+          ],
+          "type": "backward",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "outputs/impl/Ext实现报告.md"
+            },
+            {
+              "path": "outputs/Ext工程师-gate-result.json"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "Ext工程师红队",
+      "role": "Ext工程师红队",
+      "transitions": {
+        "fail": {
+          "targets": [
+            "Ext工程师"
+          ],
+          "type": "backward",
+          "max_executions": 3
+        },
+        "confirmed": {
+          "targets": [
+            "单元测试工程师"
+          ],
+          "type": "normal"
+        }
+      }
+    },
+    {
+      "step": "单元测试工程师",
+      "role": "单元测试工程师",
+      "transitions": {
+        "confirmed": {
+          "targets": [
+            "单元测试工程师红队"
+          ],
+          "type": "normal"
+        },
+        "fail": {
+          "targets": [
+            "单元测试工程师"
+          ],
+          "type": "backward",
+          "max_executions": 3,
+          "carries": [
+            {
+              "path": "outputs/test/单元测试报告.md"
+            },
+            {
+              "path": "outputs/单元测试工程师-gate-result.json"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "单元测试工程师红队",
+      "role": "单元测试工程师红队",
+      "transitions": {
+        "fail": {
+          "targets": [
+            "单元测试工程师"
+          ],
+          "type": "backward",
+          "max_executions": 3
+        },
+        "confirmed": {
+          "targets": [
+            "联调测试师"
+          ],
+          "type": "normal"
+        }
+      }
+    },
+    {
+      "step": "联调测试师",
+      "role": "联调测试师",
+      "transitions": {
+        "confirmed": {
+          "targets": [],
+          "type": "normal"
+        },
+        "fail": {
+          "targets": [
+            "前端工程师",
+            "Ext工程师"
+          ],
+          "type": "backward",
+          "max_executions": 3
+        },
+        "fail_deep": {
+          "targets": [
+            "数据层工程师"
+          ],
+          "type": "backward",
+          "max_executions": 2
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "schema_version": "2.0",
+  "app_name": "server-dev",
+  "paths": {
+    "router": "ROUTER.json",
+    "registry": "registry.json"
+  },
+  "workspace_template": {
+    "dirs": [
+      "knowledge",
+      "outputs/design",
+      "outputs/impl",
+      "outputs/review",
+      "outputs/test"
+    ],
+    "init_files": {},
+    "knowledge_sources": [
+      {
+        "from": "knowledge/需求闭环准则.md",
+        "to": "knowledge/需求闭环准则.md"
+      },
+      {
+        "from": "knowledge/接口兼容性校验规范.md",
+        "to": "knowledge/接口兼容性校验规范.md"
+      },
+      {
+        "from": "knowledge/联调测试指南.md",
+        "to": "knowledge/联调测试指南.md"
+      },
+      {
+        "from": "knowledge/数据架构质量原则.md",
+        "to": "knowledge/数据架构质量原则.md"
+      },
+      {
+        "from": "knowledge/后端架构质量原则.md",
+        "to": "knowledge/后端架构质量原则.md"
+      },
+      {
+        "from": "knowledge/前端架构质量原则.md",
+        "to": "knowledge/前端架构质量原则.md"
+      },
+      {
+        "from": "knowledge/扩展架构质量原则.md",
+        "to": "knowledge/扩展架构质量原则.md"
+      },
+      {
+        "from": "knowledge/单元测试质量原则.md",
+        "to": "knowledge/单元测试质量原则.md"
+      }
+    ]
+  }
+}

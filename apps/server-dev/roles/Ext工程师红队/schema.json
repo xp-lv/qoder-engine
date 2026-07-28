@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {},
+  "required": [],
+  "_required_files": [
+    {
+      "name": "Ext实现红队报告",
+      "path": "outputs/review/Ext实现红队报告.json"
+    }
+  ]
+}

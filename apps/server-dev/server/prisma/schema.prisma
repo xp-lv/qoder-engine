@@ -1,0 +1,45 @@
+// Prisma 5 schema — SQLite 验证适配版（运行验证专用，原 PostgreSQL 版见 schema.prisma.pg.bak）
+// 仅用于本地无 PostgreSQL 环境的端到端运行验证
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model ReportStatus {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique
+  label     String
+  sortOrder Int      @map("sort_order") @default(0)
+  createdAt DateTime @map("created_at") @default(now())
+  updatedAt DateTime @map("updated_at") @default(now())
+
+  qoderReports QoderReport[]
+
+  @@map("report_status")
+}
+
+model QoderReport {
+  id             Int       @id @default(autoincrement())
+  instanceId     String    @map("instance_id")
+  hostname       String
+  qoderVersion   String    @map("qoder_version")
+  statusId       Int       @map("status_id")
+  uptime         Int?
+  cpuUsage       Float?    @map("cpu_usage")
+  memUsage       Float?    @map("mem_usage")
+  workspaceCount Int?      @map("workspace_count")
+  reportedAt     DateTime  @map("reported_at")
+  createdAt      DateTime  @map("created_at") @default(now())
+  updatedAt      DateTime  @map("updated_at") @default(now())
+  deletedAt      DateTime? @map("deleted_at")
+
+  status ReportStatus @relation(fields: [statusId], references: [id], onDelete: Restrict)
+
+  @@index([instanceId, reportedAt(sort: Desc)], map: "idx_qoder_report_instance_reported")
+  @@map("qoder_report")
+}

@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${QODER_PLUGIN_ROOT}/bin/collector.sh\" start",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${QODER_PLUGIN_ROOT}/bin/collector.sh\" stop",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
